@@ -1,0 +1,62 @@
+title: "EP: 40BB+ First In"
+description: "Open raise range for EP (UTG)"
+details: |
+  EP (UTG) First In 40+ BBs:
+  Tight RAISE (~13%).
+  Prefer suited hands and
+  high pairs.
+
+  Only limp if the table
+  is hyper-passive.
+
+  Use the same raise size
+  for all hands in range.
+actions:
+  - name: raise
+    title: "Raise"
+    color: "#20bf55"
+    hands:
+      - AA
+      - KK
+      - QQ
+      - JJ
+      - TT
+      - AKs
+      - AQs
+      - AJs
+      - ATs
+      - KQs
+      - KJs
+      - QJs
+      - AKo
+      - AQo
+
+  - name: limp
+    title: "Limp"
+    color: "#ffffff"
+    hands:
+      - 99
+      - 88
+      - 77
+      - 66
+      - 55
+      - 44
+      - 33
+      - 22
+      - A9s
+      - A8s
+      - A7s
+      - A6s
+      - A5s
+      - A4s
+      - A3s
+      - A2s
+      - KTs
+      - QTs
+      - JTs
+      - T9s
+      - 98s
+      - 97s
+      - 87s
+      - 76s
+      - 65s

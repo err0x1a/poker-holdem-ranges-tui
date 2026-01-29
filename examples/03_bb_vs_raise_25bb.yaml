@@ -1,0 +1,111 @@
+title: "BB vs Raise <25BB: Valid Call"
+description: "BB call vs raise with less than 25BB"
+details: |
+  STACK <25BB - BB CALL:
+  Valid (pot odds +
+  closed action).
+
+  Wide range vs normal
+  raiser.
+
+  Vs LOOSE raiser:
+  - FOLDS -> SHOVE more
+  - CALLS -> CALL more
+
+  Postflop: pair/draw
+  -> CHECK/SHOVE.
+actions:
+  - name: allin
+    title: "All-In"
+    color: "#FF8A80"
+    hands:
+      # Premium Pairs
+      - AA
+      - KK
+      - QQ
+      - JJ
+      - TT
+      - 99
+      # Premium Suited
+      - AKs
+      - AQs
+      # Premium Offsuit
+      - AKo
+      - AQo
+
+  - name: call
+    title: "Call"
+    color: "#FFFFFF"
+    hands:
+      # Offsuit Aces
+      - AJo
+      - ATo
+      - A9o
+      - A8o
+      - A7o
+      - A6o
+      - A5o
+      - A4o
+      - A3o
+      - A2o
+      # Offsuit Kings
+      - KQo
+      - KJo
+      - KTo
+      - K9o
+      # Offsuit Queens
+      - QJo
+      - QTo
+      - Q9o
+      # Offsuit Jacks
+      - JTo
+      - J9o
+      # Offsuit Connectors
+      - T9o
+      - 98o
+      - 87o
+      # Suited Aces
+      - AJs
+      - ATs
+      - A9s
+      - A8s
+      - A7s
+      - A6s
+      - A5s
+      - A4s
+      - A3s
+      - A2s
+      # Suited Kings
+      - KQs
+      - KJs
+      - KTs
+      - K9s
+      - K8s
+      - K7s
+      # Suited Queens
+      - QJs
+      - QTs
+      - Q9s
+      - Q8s
+      # Suited Jacks
+      - JTs
+      - J9s
+      - J8s
+      # Pairs
+      - 88
+      - 77
+      - 66
+      - 55
+      - 44
+      - 33
+      - 22
+      # Suited Connectors
+      - T9s
+      - T8s
+      - 98s
+      - 97s
+      - 87s
+      - 86s
+      - 76s
+      - 65s
+      - 54s
