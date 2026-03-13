@@ -1,0 +1,47 @@
+title: "EP First In (Multi-Tab Test)"
+description: "Open raise range for EP - multi tab"
+tab_ranges:
+  - tab: "40+"
+    details: |
+      Tight RAISE (~13%)
+      Standard EP open at deep stacks
+    actions:
+      - name: raise
+        title: "Raise"
+        color: "#20bf55"
+        hands:
+          - AA
+          - KK
+          - QQ
+          - JJ
+          - TT
+          - AKs
+          - AQs
+          - AJs
+          - AKo
+
+  - tab: "25-40"
+    base: "40+"
+    details: |
+      Wider range (~18%)
+      Medium stack EP open
+    actions:
+      - name: raise
+        add_hands: ["99", ATs, KQs, AQo]
+      - name: allin
+        title: "All-In"
+        color: "#FF8A80"
+        hands: ["88", "77"]
+
+  - tab: "12-25"
+    base: "25-40"
+    details: |
+      Push/fold territory approaching
+      Wider opens with some shove hands
+    actions:
+      - name: raise
+        add_hands: ["88", KJs, AJo]
+        remove_hands: ["99"]
+      - name: allin
+        remove_hands: ["88"]
+        add_hands: ["66", A9s]

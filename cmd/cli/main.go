@@ -79,13 +79,15 @@ type MainModel struct {
 	listModel        *list.Model
 	rangesModel      ranges.Model
 	selectedFilePath string
+	tabIndexByFile   map[string]int
 }
 
 // NewMainModel creates a new main model
 func NewMainModel(files []string, title string, titleColor string) MainModel {
 	return MainModel{
-		listModel:   list.New(files, title, titleColor),
-		rangesModel: ranges.New(),
+		listModel:      list.New(files, title, titleColor),
+		rangesModel:    ranges.New(),
+		tabIndexByFile: make(map[string]int),
 	}
 }
 
@@ -112,9 +114,20 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	_, _, filePath := m.listModel.SelectedItem()
 	if filePath != "" && filePath != m.selectedFilePath {
+		// Save current tab index before switching
+		if m.selectedFilePath != "" && m.rangesModel.HasTabSelector() {
+			m.tabIndexByFile[m.selectedFilePath] = m.rangesModel.TabIndex()
+		}
 		m.selectedFilePath = filePath
 		if rf, err := ranges.LoadRangeFile(filePath); err == nil {
-			m.rangesModel = ranges.NewWithRange(rf.ToHandColors(), rf.GetLegend(), rf.Details)
+			if rf.HasTabs() {
+				m.rangesModel = ranges.NewWithTabs(rf.Tabs)
+				if savedIndex, ok := m.tabIndexByFile[filePath]; ok {
+					m.rangesModel.SetTabIndex(savedIndex)
+				}
+			} else {
+				m.rangesModel = ranges.NewWithRange(rf.ToHandColors(), rf.GetLegend(), rf.Details)
+			}
 		}
 	}
 
@@ -127,5 +140,9 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m MainModel) View() string {
 	spacer := "  "
-	return lipgloss.JoinHorizontal(lipgloss.Top, m.listModel.View(), spacer, m.rangesModel.View())
+	listView := m.listModel.View()
+	if m.rangesModel.HasTabSelector() {
+		listView = lipgloss.NewStyle().MarginTop(1).Render(listView)
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, listView, spacer, m.rangesModel.View())
 }

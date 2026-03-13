@@ -7,12 +7,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// tabDisplayData holds precomputed display data for a single tab
+type tabDisplayData struct {
+	handColors map[string]string
+	legend     []Action
+	details    string
+}
+
 // Model represents the state of the ranges view.
 type Model struct {
 	cards      []string
 	handColors map[string]string
 	legend     []Action
 	details    string
+	tabIndex   int
+	tabs       []TabRange
+	tabCache   []tabDisplayData
 }
 
 // New creates a new model with the generated poker hands.
@@ -35,6 +45,48 @@ func NewWithRange(handColors map[string]string, legend []Action, details string)
 	}
 }
 
+// NewWithTabs creates a model with multiple tabs, selecting the first one
+func NewWithTabs(tabs []TabRange) Model {
+	cache := make([]tabDisplayData, len(tabs))
+	for i, tr := range tabs {
+		cache[i] = tabDisplayData{
+			handColors: ActionsToHandColors(tr.Actions),
+			legend:     filterEmptyActions(tr.Actions),
+			details:    tr.Details,
+		}
+	}
+
+	return Model{
+		cards:      Generate(),
+		handColors: cache[0].handColors,
+		legend:     cache[0].legend,
+		details:    cache[0].details,
+		tabIndex:   0,
+		tabs:       tabs,
+		tabCache:   cache,
+	}
+}
+
+// HasTabSelector returns true if the model has a tab selector bar
+func (m Model) HasTabSelector() bool {
+	return len(m.tabs) > 0
+}
+
+// TabIndex returns the currently selected tab index
+func (m Model) TabIndex() int {
+	return m.tabIndex
+}
+
+// SetTabIndex sets the selected tab index and updates display data
+func (m *Model) SetTabIndex(index int) {
+	if index >= 0 && index < len(m.tabs) {
+		m.tabIndex = index
+		m.handColors = m.tabCache[index].handColors
+		m.legend = m.tabCache[index].legend
+		m.details = m.tabCache[index].details
+	}
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
 	return nil
@@ -42,7 +94,27 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages and updates the model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// No updates to handle in this model yet
+	if len(m.tabs) > 0 {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			newIndex := m.tabIndex
+			switch keyMsg.String() {
+			case "left":
+				if m.tabIndex > 0 {
+					newIndex = m.tabIndex - 1
+				}
+			case "right":
+				if m.tabIndex < len(m.tabs)-1 {
+					newIndex = m.tabIndex + 1
+				}
+			}
+			if newIndex != m.tabIndex {
+				m.tabIndex = newIndex
+				m.handColors = m.tabCache[newIndex].handColors
+				m.legend = m.tabCache[newIndex].legend
+				m.details = m.tabCache[newIndex].details
+			}
+		}
+	}
 	return m, nil
 }
 
@@ -88,6 +160,39 @@ func (m Model) View() string {
 
 	grid := lipgloss.JoinVertical(lipgloss.Left, allRows...)
 
+	// Add tab selector above grid if present
+	if len(m.tabs) > 0 {
+		selectedStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Background(lipgloss.Color("#4488FF")).
+			Padding(0, 1)
+		dimStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#666666")).
+			Padding(0, 1)
+
+		var tabItems []string
+		for i, tr := range m.tabs {
+			if i == m.tabIndex {
+				tabItems = append(tabItems, selectedStyle.Render(tr.Tab))
+			} else {
+				tabItems = append(tabItems, dimStyle.Render(tr.Tab))
+			}
+		}
+		var tabSelector string
+		if len(m.tabs) > 1 {
+			hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
+			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center,
+				hintStyle.Render("← "),
+				lipgloss.JoinHorizontal(lipgloss.Center, tabItems...),
+				hintStyle.Render(" →"),
+			)
+		} else {
+			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center, tabItems...)
+		}
+		grid = lipgloss.JoinVertical(lipgloss.Left, tabSelector, grid)
+	}
+
 	// Build legend
 	var gridWithLegend string
 	if len(m.legend) > 0 {
@@ -111,6 +216,9 @@ func (m Model) View() string {
 			BorderForeground(lipgloss.Color("#666666")).
 			Padding(1, 2).
 			MarginLeft(2)
+		if len(m.tabs) > 0 {
+			detailsStyle = detailsStyle.MarginTop(1)
+		}
 		detailsPanel := detailsStyle.Render(m.details)
 		return lipgloss.JoinHorizontal(lipgloss.Top, gridWithLegend, detailsPanel)
 	}
@@ -127,7 +235,7 @@ func Generate() []string {
 			var hand string
 			if i == j {
 				// Pocket pairs
-				hand = " " + rankI + rankJ + ""
+				hand = " " + rankI + rankJ + ""
 			} else if i < j {
 				// Suited hands
 				hand = rankI + rankJ + "s"
