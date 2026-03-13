@@ -23,6 +23,12 @@ type Model struct {
 	tabIndex   int
 	tabs       []TabRange
 	tabCache   []tabDisplayData
+
+	// Opposite range toggle
+	oppositeData    []*tabDisplayData // one per tab (or single element for no-tab files)
+	showingOpposite bool
+	oppositeLabel   string
+	savedDisplay    *tabDisplayData
 }
 
 // New creates a new model with the generated poker hands.
@@ -67,6 +73,13 @@ func NewWithTabs(tabs []TabRange) Model {
 	}
 }
 
+// SetOppositeData sets the opposite range data and label for toggle display.
+// For tab files, pass one *tabDisplayData per tab; for non-tab files, pass a single element.
+func (m *Model) SetOppositeData(data []*tabDisplayData, label string) {
+	m.oppositeData = data
+	m.oppositeLabel = label
+}
+
 // HasTabSelector returns true if the model has a tab selector bar
 func (m Model) HasTabSelector() bool {
 	return len(m.tabs) > 0
@@ -80,6 +93,8 @@ func (m Model) TabIndex() int {
 // SetTabIndex sets the selected tab index and updates display data
 func (m *Model) SetTabIndex(index int) {
 	if index >= 0 && index < len(m.tabs) {
+		m.showingOpposite = false
+		m.savedDisplay = nil
 		m.tabIndex = index
 		m.handColors = m.tabCache[index].handColors
 		m.legend = m.tabCache[index].legend
@@ -94,28 +109,80 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages and updates the model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if len(m.tabs) > 0 {
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			newIndex := m.tabIndex
-			switch keyMsg.String() {
-			case "left":
-				if m.tabIndex > 0 {
-					newIndex = m.tabIndex - 1
-				}
-			case "right":
-				if m.tabIndex < len(m.tabs)-1 {
-					newIndex = m.tabIndex + 1
-				}
-			}
-			if newIndex != m.tabIndex {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case "o":
+			m.toggleOpposite()
+			return m, nil
+		case "left":
+			if len(m.tabs) > 0 && m.tabIndex > 0 {
+				m.showingOpposite = false
+				m.savedDisplay = nil
+				newIndex := m.tabIndex - 1
 				m.tabIndex = newIndex
 				m.handColors = m.tabCache[newIndex].handColors
 				m.legend = m.tabCache[newIndex].legend
 				m.details = m.tabCache[newIndex].details
 			}
+			return m, nil
+		case "right":
+			if len(m.tabs) > 0 && m.tabIndex < len(m.tabs)-1 {
+				m.showingOpposite = false
+				m.savedDisplay = nil
+				newIndex := m.tabIndex + 1
+				m.tabIndex = newIndex
+				m.handColors = m.tabCache[newIndex].handColors
+				m.legend = m.tabCache[newIndex].legend
+				m.details = m.tabCache[newIndex].details
+			}
+			return m, nil
 		}
 	}
 	return m, nil
+}
+
+// hasOpposite returns true if an opposite range is available for the current tab
+func (m *Model) hasOpposite() bool {
+	idx := 0
+	if len(m.tabs) > 0 {
+		idx = m.tabIndex
+	}
+	return idx < len(m.oppositeData) && m.oppositeData[idx] != nil
+}
+
+// toggleOpposite switches between the original and opposite range display
+func (m *Model) toggleOpposite() {
+	// Determine current opposite data index
+	idx := 0
+	if len(m.tabs) > 0 {
+		idx = m.tabIndex
+	}
+	if idx >= len(m.oppositeData) || m.oppositeData[idx] == nil {
+		return
+	}
+
+	if m.showingOpposite {
+		// Restore original
+		if m.savedDisplay != nil {
+			m.handColors = m.savedDisplay.handColors
+			m.legend = m.savedDisplay.legend
+			m.details = m.savedDisplay.details
+			m.savedDisplay = nil
+		}
+		m.showingOpposite = false
+	} else {
+		// Save current and show opposite
+		m.savedDisplay = &tabDisplayData{
+			handColors: m.handColors,
+			legend:     m.legend,
+			details:    m.details,
+		}
+		opp := m.oppositeData[idx]
+		m.handColors = opp.handColors
+		m.legend = opp.legend
+		m.details = opp.details
+		m.showingOpposite = true
+	}
 }
 
 // ActionType represents the type of action for a hand
@@ -160,6 +227,19 @@ func (m Model) View() string {
 
 	grid := lipgloss.JoinVertical(lipgloss.Left, allRows...)
 
+	// Build opposite eye indicator
+	var eyeIndicator string
+	if m.hasOpposite() {
+		eyeStyle := lipgloss.NewStyle().Padding(0, 1)
+		if m.showingOpposite {
+			eyeStyle = eyeStyle.Foreground(lipgloss.Color("#FFD166")).Bold(true)
+			eyeIndicator = eyeStyle.Render("👁")
+		} else {
+			eyeStyle = eyeStyle.Foreground(lipgloss.Color("#555555"))
+			eyeIndicator = eyeStyle.Render("👁")
+		}
+	}
+
 	// Add tab selector above grid if present
 	if len(m.tabs) > 0 {
 		selectedStyle := lipgloss.NewStyle().
@@ -190,7 +270,13 @@ func (m Model) View() string {
 		} else {
 			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center, tabItems...)
 		}
+		if eyeIndicator != "" {
+			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center, tabSelector, eyeIndicator)
+		}
 		grid = lipgloss.JoinVertical(lipgloss.Left, tabSelector, grid)
+	} else if eyeIndicator != "" {
+		// No tabs — put eye indicator on its own line above grid
+		grid = lipgloss.JoinVertical(lipgloss.Right, eyeIndicator, grid)
 	}
 
 	// Build legend

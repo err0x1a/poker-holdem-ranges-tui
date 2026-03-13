@@ -1,7 +1,13 @@
 title: "EP First In (Multi-Tab Test)"
 description: "Open raise range for EP - multi tab"
+opposite:
+  file: "test_opposite.yaml"
+  tab: "40+"
 tab_ranges:
   - tab: "40+"
+    opposite:
+      file: "test_opposite.yaml"
+      tab: "40+"
     details: |
       Tight RAISE (~13%)
       Standard EP open at deep stacks
@@ -22,6 +28,9 @@ tab_ranges:
 
   - tab: "25-40"
     base: "40+"
+    opposite:
+      file: "test_opposite.yaml"
+      tab: "25-40"
     details: |
       Wider range (~18%)
       Medium stack EP open
@@ -35,6 +44,9 @@ tab_ranges:
 
   - tab: "12-25"
     base: "25-40"
+    opposite:
+      file: "test_opposite.yaml"
+      tab: "12-25"
     details: |
       Push/fold territory approaching
       Wider opens with some shove hands

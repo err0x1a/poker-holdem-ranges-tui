@@ -24,21 +24,29 @@ type Action struct {
 	RemoveHands []string `yaml:"remove_hands"`
 }
 
+// OppositeRef points to an opposite range file (and optionally a specific tab)
+type OppositeRef struct {
+	File string `yaml:"file"`
+	Tab  string `yaml:"tab"`
+}
+
 // TabRange represents a single tab with its own actions and details
 type TabRange struct {
-	Tab     string   `yaml:"tab"`
-	Base    string   `yaml:"base"`
-	Details string   `yaml:"details"`
-	Actions []Action `yaml:"actions"`
+	Tab      string       `yaml:"tab"`
+	Base     string       `yaml:"base"`
+	Details  string       `yaml:"details"`
+	Actions  []Action     `yaml:"actions"`
+	Opposite *OppositeRef `yaml:"opposite"`
 }
 
 // RangeFile represents the full YAML structure
 type RangeFile struct {
-	Title       string     `yaml:"title"`
-	Description string     `yaml:"description"`
-	Details     string     `yaml:"details"`
-	Actions     []Action   `yaml:"actions"`
-	Tabs        []TabRange `yaml:"tab_ranges"`
+	Title       string       `yaml:"title"`
+	Description string       `yaml:"description"`
+	Details     string       `yaml:"details"`
+	Actions     []Action     `yaml:"actions"`
+	Tabs        []TabRange   `yaml:"tab_ranges"`
+	Opposite    *OppositeRef `yaml:"opposite"`
 }
 
 // HasTabs returns true if the file uses the multi-tab format
@@ -256,4 +264,57 @@ func filterEmptyActions(actions []Action) []Action {
 		}
 	}
 	return filtered
+}
+
+// TabDisplayData holds precomputed display data for a single tab (exported for opposite loading)
+type TabDisplayData = tabDisplayData
+
+// LoadOppositeData loads the opposite range data given a base file path and an OppositeRef.
+// Returns nil if the opposite file cannot be loaded.
+func LoadOppositeData(basePath string, ref OppositeRef) *tabDisplayData {
+	dir := filepath.Dir(basePath)
+	oppPath := filepath.Join(dir, ref.File)
+	oppPath = filepath.Clean(oppPath)
+
+	rf, err := LoadRangeFile(oppPath)
+	if err != nil {
+		return nil
+	}
+
+	var actions []Action
+	var details string
+
+	if rf.HasTabs() {
+		tab := findTab(rf.Tabs, ref.Tab)
+		if tab == nil {
+			return nil
+		}
+		actions = tab.Actions
+		details = tab.Details
+	} else {
+		actions = rf.Actions
+		details = rf.Details
+	}
+
+	return &tabDisplayData{
+		handColors: ActionsToHandColors(actions),
+		legend:     filterEmptyActions(actions),
+		details:    details,
+	}
+}
+
+// findTab finds a tab by name, or returns the first tab if name is empty
+func findTab(tabs []TabRange, name string) *TabRange {
+	if len(tabs) == 0 {
+		return nil
+	}
+	if name == "" {
+		return &tabs[0]
+	}
+	for i := range tabs {
+		if tabs[i].Tab == name {
+			return &tabs[i]
+		}
+	}
+	return nil
 }
