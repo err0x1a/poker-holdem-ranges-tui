@@ -135,11 +135,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Load single opposite
 				if rf.Opposite != nil {
 					if opp := ranges.LoadOppositeData(filePath, *rf.Opposite); opp != nil {
-						label := filepath.Base(rf.Opposite.File)
-						if rf.Opposite.Tab != "" {
-							label += " [" + rf.Opposite.Tab + "]"
-						}
-						m.rangesModel.SetOppositeData([]*ranges.TabDisplayData{opp}, label)
+						m.rangesModel.SetOppositeData([]*ranges.TabDisplayData{opp}, rf.Opposite.Label())
 					}
 				}
 			}
@@ -164,10 +160,12 @@ func (m MainModel) View() string {
 
 // loadTabOpposites loads opposite data for each tab in a tabbed range file.
 // Returns nil if no tab has an opposite reference. Uses the file-level opposite as fallback.
+// Caches loaded opposite files by resolved path to avoid redundant disk reads.
 func loadTabOpposites(filePath string, rf *ranges.RangeFile) ([]*ranges.TabDisplayData, string) {
 	oppData := make([]*ranges.TabDisplayData, len(rf.Tabs))
 	hasAny := false
 	label := ""
+	fileCache := make(map[string]*ranges.RangeFile)
 
 	for i, tr := range rf.Tabs {
 		ref := tr.Opposite
@@ -177,15 +175,12 @@ func loadTabOpposites(filePath string, rf *ranges.RangeFile) ([]*ranges.TabDispl
 		if ref == nil {
 			continue
 		}
-		opp := ranges.LoadOppositeData(filePath, *ref)
+		opp := ranges.LoadOppositeDataCached(filePath, *ref, fileCache)
 		if opp != nil {
 			oppData[i] = opp
 			hasAny = true
 			if label == "" {
-				label = filepath.Base(ref.File)
-				if ref.Tab != "" {
-					label += " [" + ref.Tab + "]"
-				}
+				label = ref.Label()
 			}
 		}
 	}

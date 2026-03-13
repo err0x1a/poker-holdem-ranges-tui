@@ -90,15 +90,20 @@ func (m Model) TabIndex() int {
 	return m.tabIndex
 }
 
+// applyDisplay updates the model's display fields from a tabDisplayData
+func (m *Model) applyDisplay(d *tabDisplayData) {
+	m.handColors = d.handColors
+	m.legend = d.legend
+	m.details = d.details
+}
+
 // SetTabIndex sets the selected tab index and updates display data
 func (m *Model) SetTabIndex(index int) {
 	if index >= 0 && index < len(m.tabs) {
 		m.showingOpposite = false
 		m.savedDisplay = nil
 		m.tabIndex = index
-		m.handColors = m.tabCache[index].handColors
-		m.legend = m.tabCache[index].legend
-		m.details = m.tabCache[index].details
+		m.applyDisplay(&m.tabCache[index])
 	}
 }
 
@@ -116,24 +121,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "left":
 			if len(m.tabs) > 0 && m.tabIndex > 0 {
-				m.showingOpposite = false
-				m.savedDisplay = nil
-				newIndex := m.tabIndex - 1
-				m.tabIndex = newIndex
-				m.handColors = m.tabCache[newIndex].handColors
-				m.legend = m.tabCache[newIndex].legend
-				m.details = m.tabCache[newIndex].details
+				m.SetTabIndex(m.tabIndex - 1)
 			}
 			return m, nil
 		case "right":
 			if len(m.tabs) > 0 && m.tabIndex < len(m.tabs)-1 {
-				m.showingOpposite = false
-				m.savedDisplay = nil
-				newIndex := m.tabIndex + 1
-				m.tabIndex = newIndex
-				m.handColors = m.tabCache[newIndex].handColors
-				m.legend = m.tabCache[newIndex].legend
-				m.details = m.tabCache[newIndex].details
+				m.SetTabIndex(m.tabIndex + 1)
 			}
 			return m, nil
 		}
@@ -141,46 +134,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// hasOpposite returns true if an opposite range is available for the current tab
-func (m *Model) hasOpposite() bool {
+// currentOpposite returns the opposite data for the current tab, or nil
+func (m Model) currentOpposite() *tabDisplayData {
 	idx := 0
 	if len(m.tabs) > 0 {
 		idx = m.tabIndex
 	}
-	return idx < len(m.oppositeData) && m.oppositeData[idx] != nil
+	if idx < len(m.oppositeData) {
+		return m.oppositeData[idx]
+	}
+	return nil
 }
 
 // toggleOpposite switches between the original and opposite range display
 func (m *Model) toggleOpposite() {
-	// Determine current opposite data index
-	idx := 0
-	if len(m.tabs) > 0 {
-		idx = m.tabIndex
-	}
-	if idx >= len(m.oppositeData) || m.oppositeData[idx] == nil {
+	opp := m.currentOpposite()
+	if opp == nil {
 		return
 	}
 
 	if m.showingOpposite {
-		// Restore original
 		if m.savedDisplay != nil {
-			m.handColors = m.savedDisplay.handColors
-			m.legend = m.savedDisplay.legend
-			m.details = m.savedDisplay.details
+			m.applyDisplay(m.savedDisplay)
 			m.savedDisplay = nil
 		}
 		m.showingOpposite = false
 	} else {
-		// Save current and show opposite
 		m.savedDisplay = &tabDisplayData{
 			handColors: m.handColors,
 			legend:     m.legend,
 			details:    m.details,
 		}
-		opp := m.oppositeData[idx]
-		m.handColors = opp.handColors
-		m.legend = opp.legend
-		m.details = opp.details
+		m.applyDisplay(opp)
 		m.showingOpposite = true
 	}
 }
@@ -229,7 +214,7 @@ func (m Model) View() string {
 
 	// Build opposite eye indicator
 	var eyeIndicator string
-	if m.hasOpposite() {
+	if m.currentOpposite() != nil {
 		eyeStyle := lipgloss.NewStyle().Padding(0, 1)
 		if m.showingOpposite {
 			eyeStyle = eyeStyle.Foreground(lipgloss.Color("#FFD166")).Bold(true)

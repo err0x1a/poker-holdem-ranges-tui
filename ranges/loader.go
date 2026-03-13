@@ -30,6 +30,15 @@ type OppositeRef struct {
 	Tab  string `yaml:"tab"`
 }
 
+// Label returns a display label like "filename.yaml [tab]"
+func (r OppositeRef) Label() string {
+	label := filepath.Base(r.File)
+	if r.Tab != "" {
+		label += " [" + r.Tab + "]"
+	}
+	return label
+}
+
 // TabRange represents a single tab with its own actions and details
 type TabRange struct {
 	Tab      string       `yaml:"tab"`
@@ -272,13 +281,30 @@ type TabDisplayData = tabDisplayData
 // LoadOppositeData loads the opposite range data given a base file path and an OppositeRef.
 // Returns nil if the opposite file cannot be loaded.
 func LoadOppositeData(basePath string, ref OppositeRef) *tabDisplayData {
-	dir := filepath.Dir(basePath)
-	oppPath := filepath.Join(dir, ref.File)
-	oppPath = filepath.Clean(oppPath)
+	return LoadOppositeDataCached(basePath, ref, nil)
+}
 
-	rf, err := LoadRangeFile(oppPath)
-	if err != nil {
-		return nil
+// LoadOppositeDataCached is like LoadOppositeData but uses a cache to avoid re-reading
+// the same YAML file when multiple tabs reference the same opposite file.
+func LoadOppositeDataCached(basePath string, ref OppositeRef, fileCache map[string]*RangeFile) *tabDisplayData {
+	dir := filepath.Dir(basePath)
+	oppPath := filepath.Clean(filepath.Join(dir, ref.File))
+
+	var rf *RangeFile
+	if fileCache != nil {
+		if cached, ok := fileCache[oppPath]; ok {
+			rf = cached
+		}
+	}
+	if rf == nil {
+		var err error
+		rf, err = LoadRangeFile(oppPath)
+		if err != nil {
+			return nil
+		}
+		if fileCache != nil {
+			fileCache[oppPath] = rf
+		}
 	}
 
 	var actions []Action
