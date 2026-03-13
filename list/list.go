@@ -1,6 +1,7 @@
 package list
 
 import (
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -22,7 +23,9 @@ func (i item) FilterValue() string { return i.title }
 func (i item) FilePath() string { return i.filePath }
 
 type Model struct {
-	list list.Model
+	list      list.Model
+	hasTitle  bool
+	itemSlotH int // height + spacing per item
 }
 
 func New(files []string, title string, titleColor string) *Model {
@@ -63,7 +66,17 @@ func New(files []string, title string, titleColor string) *Model {
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
 
-	model := Model{list: l}
+	// Rebind navigation: arrows/hjkl go to grid, list uses ctrl+n/p and pgup/pgdown
+	l.KeyMap.CursorUp = key.NewBinding(key.WithKeys("ctrl+p"))
+	l.KeyMap.CursorDown = key.NewBinding(key.WithKeys("ctrl+n"))
+	l.KeyMap.PrevPage = key.NewBinding(key.WithKeys("pgup"))
+	l.KeyMap.NextPage = key.NewBinding(key.WithKeys("pgdown"))
+
+	model := Model{
+		list:      l,
+		hasTitle:  title != "",
+		itemSlotH: 3, // defaultHeight(2) + defaultSpacing(1)
+	}
 	return &model
 }
 
@@ -83,6 +96,30 @@ func (m *Model) SetSize(width, height int) {
 
 func (m *Model) View() string {
 	return lipgloss.NewStyle().Width(m.list.Width() + 2).Height(m.list.Height() + 2).Render(m.list.View())
+}
+
+// HandleClick selects the list item at the given screen Y coordinate.
+func (m *Model) HandleClick(y int) {
+	// Header offset: title(2 lines) or no-title(0), plus filter bar area
+	headerH := 0
+	if m.hasTitle {
+		headerH = 2 // title line + blank line
+	}
+
+	itemY := y - headerH
+	if itemY < 0 {
+		return
+	}
+
+	idx := m.list.Paginator.Page*m.list.Paginator.PerPage + itemY/m.itemSlotH
+	if idx >= 0 && idx < len(m.list.Items()) {
+		m.list.Select(idx)
+	}
+}
+
+// ViewWidth returns the total rendered width of the list view
+func (m *Model) ViewWidth() int {
+	return m.list.Width() + 2
 }
 
 // SelectedItem returns the currently selected item

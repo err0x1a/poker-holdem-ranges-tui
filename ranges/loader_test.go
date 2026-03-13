@@ -7,6 +7,207 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestHandEntryUnmarshal(t *testing.T) {
+	data := `
+- AA
+- hand: AQo
+  freq: 50
+- "77"
+`
+	var entries []HandEntry
+	if err := yaml.Unmarshal([]byte(data), &entries); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(entries))
+	}
+
+	if entries[0].Hand != "AA" || entries[0].Freq != 0 {
+		t.Errorf("expected {AA, 0}, got {%s, %d}", entries[0].Hand, entries[0].Freq)
+	}
+	if entries[1].Hand != "AQo" || entries[1].Freq != 50 {
+		t.Errorf("expected {AQo, 50}, got {%s, %d}", entries[1].Hand, entries[1].Freq)
+	}
+	if entries[2].Hand != "77" || entries[2].Freq != 0 {
+		t.Errorf("expected {77, 0}, got {%s, %d}", entries[2].Hand, entries[2].Freq)
+	}
+}
+
+func TestActionsToHandDetailsMixed(t *testing.T) {
+	actions := []Action{
+		{
+			Name:  "allin",
+			Title: "All-In",
+			Color: "#FF8A80",
+			Hands: []HandEntry{
+				{Hand: "AA", Freq: 0},
+				{Hand: "AQo", Freq: 50},
+			},
+		},
+		{
+			Name:  "call",
+			Title: "Call",
+			Color: "#FFFFFF",
+			Hands: []HandEntry{
+				{Hand: "KK", Freq: 0},
+				{Hand: "AQo", Freq: 50},
+			},
+		},
+	}
+
+	hd := ActionsToHandDetails(actions)
+
+	// Dominant color (details[0]) for normal hands
+	if hd["AA"][0].Color != "#FF8A80" {
+		t.Errorf("AA dominant color should be #FF8A80, got %s", hd["AA"][0].Color)
+	}
+	if hd["KK"][0].Color != "#FFFFFF" {
+		t.Errorf("KK dominant color should be #FFFFFF, got %s", hd["KK"][0].Color)
+	}
+
+	// Mixed hand: dominant is highest freq (both 50%, first wins = All-In)
+	if hd["AQo"][0].Color != "#FF8A80" {
+		t.Errorf("AQo dominant color should be #FF8A80, got %s", hd["AQo"][0].Color)
+	}
+
+	// All hands have details
+	if len(hd["AA"]) != 1 || hd["AA"][0].Freq != 100 {
+		t.Errorf("AA should have 1 detail at 100%%, got %v", hd["AA"])
+	}
+	if len(hd["AQo"]) != 2 {
+		t.Fatalf("AQo should have 2 details, got %d", len(hd["AQo"]))
+	}
+	if hd["AQo"][0].Title != "All-In" || hd["AQo"][0].Freq != 50 {
+		t.Errorf("first detail should be All-In 50%%, got %s %d%%", hd["AQo"][0].Title, hd["AQo"][0].Freq)
+	}
+	if hd["AQo"][1].Title != "Call" || hd["AQo"][1].Freq != 50 {
+		t.Errorf("second detail should be Call 50%%, got %s %d%%", hd["AQo"][1].Title, hd["AQo"][1].Freq)
+	}
+}
+
+func TestMixedDetails(t *testing.T) {
+	actions := []Action{
+		{
+			Name:  "raise",
+			Title: "Raise",
+			Color: "#20bf55",
+			Hands: []HandEntry{
+				{Hand: "AQo", Freq: 30},
+			},
+		},
+		{
+			Name:  "allin",
+			Title: "All-In",
+			Color: "#FF8A80",
+			Hands: []HandEntry{
+				{Hand: "AQo", Freq: 50},
+			},
+		},
+		{
+			Name:  "call",
+			Title: "Call",
+			Color: "#FFFFFF",
+			Hands: []HandEntry{
+				{Hand: "AQo", Freq: 20},
+			},
+		},
+	}
+
+	hd := ActionsToHandDetails(actions)
+
+	details := hd["AQo"]
+	if len(details) != 3 {
+		t.Fatalf("expected 3 details for AQo, got %d", len(details))
+	}
+
+	// Should be sorted by freq desc
+	if details[0].Freq != 50 || details[0].Title != "All-In" {
+		t.Errorf("first should be All-In 50%%, got %s %d%%", details[0].Title, details[0].Freq)
+	}
+	if details[1].Freq != 30 || details[1].Title != "Raise" {
+		t.Errorf("second should be Raise 30%%, got %s %d%%", details[1].Title, details[1].Freq)
+	}
+	if details[2].Freq != 20 || details[2].Title != "Call" {
+		t.Errorf("third should be Call 20%%, got %s %d%%", details[2].Title, details[2].Freq)
+	}
+}
+
+func TestBuildLegend(t *testing.T) {
+	actions := []Action{
+		{Name: "raise", Title: "Raise", Color: "#20bf55", Hands: []HandEntry{{Hand: "AA"}}},
+		{Name: "call", Title: "Call", Color: "#FFFFFF", Hands: []HandEntry{{Hand: "KK"}}},
+		{Name: "empty", Title: "Empty", Color: "#000000", Hands: nil},
+	}
+
+	legend := buildLegend(actions)
+	if len(legend) != 2 {
+		t.Errorf("expected 2 legend entries (empty filtered out), got %d", len(legend))
+	}
+}
+
+func TestResolveTabsWithHandEntry(t *testing.T) {
+	data := `
+title: "Test"
+tab_ranges:
+  - tab: "base"
+    actions:
+      - name: raise
+        title: "Raise"
+        color: "#20bf55"
+        hands:
+          - AA
+          - KK
+          - hand: AQo
+            freq: 50
+      - name: allin
+        title: "All-In"
+        color: "#FF8A80"
+        hands:
+          - hand: AQo
+            freq: 50
+
+  - tab: "child"
+    base: "base"
+    actions:
+      - name: raise
+        remove_hands: [KK]
+        add_hands: [QQ]
+`
+
+	var rf RangeFile
+	if err := yaml.Unmarshal([]byte(data), &rf); err != nil {
+		t.Fatal(err)
+	}
+
+	resolveTabs(rf.Tabs)
+
+	child := rf.Tabs[1]
+	for _, a := range child.Actions {
+		if a.Name == "raise" {
+			if containsHand(a.Hands, "KK") {
+				t.Error("child raise should not contain KK")
+			}
+			if !containsHand(a.Hands, "AA") {
+				t.Error("child raise should contain AA")
+			}
+			if !containsHand(a.Hands, "QQ") {
+				t.Error("child raise should contain QQ")
+			}
+			for _, he := range a.Hands {
+				if he.Hand == "AQo" && he.Freq != 50 {
+					t.Errorf("AQo should have freq 50, got %d", he.Freq)
+				}
+			}
+		}
+		if a.Name == "allin" {
+			if !containsHand(a.Hands, "AQo") {
+				t.Error("child allin should contain AQo")
+			}
+		}
+	}
+}
+
 func TestResolveBTN(t *testing.T) {
 	data := `
 title: "BTN First In"
@@ -65,63 +266,61 @@ tab_ranges:
 
 	resolveTabs(rf.Tabs)
 
-	// 30BB checks
 	tab30 := rf.Tabs[1]
 	for _, a := range tab30.Actions {
 		switch a.Name {
 		case "raise":
-			if contains(a.Hands, "J2s") {
+			if containsHand(a.Hands, "J2s") {
 				t.Error("30BB raise should not contain J2s")
 			}
 		case "raise_high_freq":
-			if !contains(a.Hands, "T4s") || !contains(a.Hands, "K6o") {
-				t.Errorf("30BB raise_high_freq should contain T4s and K6o, got: %v", a.Hands)
+			if !containsHand(a.Hands, "T4s") || !containsHand(a.Hands, "K6o") {
+				t.Errorf("30BB raise_high_freq should contain T4s and K6o, got: %v", handNames(a.Hands))
 			}
 		case "raise_mid_freq":
-			if !contains(a.Hands, "J3s") || !contains(a.Hands, "64s") {
-				t.Errorf("30BB raise_mid_freq should contain J3s and 64s, got: %v", a.Hands)
+			if !containsHand(a.Hands, "J3s") || !containsHand(a.Hands, "64s") {
+				t.Errorf("30BB raise_mid_freq should contain J3s and 64s, got: %v", handNames(a.Hands))
 			}
 		}
 	}
 
-	// 17BB checks
 	tab17 := rf.Tabs[2]
 	for _, a := range tab17.Actions {
 		switch a.Name {
 		case "raise":
-			if contains(a.Hands, "J3s") {
+			if containsHand(a.Hands, "J3s") {
 				t.Error("17BB raise should not contain J3s")
 			}
-			if contains(a.Hands, "T4s") {
+			if containsHand(a.Hands, "T4s") {
 				t.Error("17BB raise should not contain T4s")
 			}
 		case "raise_high_freq":
-			if contains(a.Hands, "T4s") {
-				t.Errorf("17BB raise_high_freq should NOT contain T4s, got: %v", a.Hands)
+			if containsHand(a.Hands, "T4s") {
+				t.Errorf("17BB raise_high_freq should NOT contain T4s, got: %v", handNames(a.Hands))
 			}
-			if contains(a.Hands, "K6o") {
-				t.Errorf("17BB raise_high_freq should NOT contain K6o, got: %v", a.Hands)
+			if containsHand(a.Hands, "K6o") {
+				t.Errorf("17BB raise_high_freq should NOT contain K6o, got: %v", handNames(a.Hands))
 			}
-			if !contains(a.Hands, "K8o") {
-				t.Errorf("17BB raise_high_freq should contain K8o, got: %v", a.Hands)
+			if !containsHand(a.Hands, "K8o") {
+				t.Errorf("17BB raise_high_freq should contain K8o, got: %v", handNames(a.Hands))
 			}
 		case "raise_mid_freq":
-			if contains(a.Hands, "J3s") {
-				t.Errorf("17BB raise_mid_freq should NOT contain J3s, got: %v", a.Hands)
+			if containsHand(a.Hands, "J3s") {
+				t.Errorf("17BB raise_mid_freq should NOT contain J3s, got: %v", handNames(a.Hands))
 			}
-			if contains(a.Hands, "64s") {
-				t.Errorf("17BB raise_mid_freq should NOT contain 64s, got: %v", a.Hands)
+			if containsHand(a.Hands, "64s") {
+				t.Errorf("17BB raise_mid_freq should NOT contain 64s, got: %v", handNames(a.Hands))
 			}
 		case "raise_low_freq":
-			if !contains(a.Hands, "65s") || !contains(a.Hands, "J5s") {
-				t.Errorf("17BB raise_low_freq should contain 65s and J5s, got: %v", a.Hands)
+			if !containsHand(a.Hands, "65s") || !containsHand(a.Hands, "J5s") {
+				t.Errorf("17BB raise_low_freq should contain 65s and J5s, got: %v", handNames(a.Hands))
 			}
 		}
 	}
 
 	fmt.Println("\n=== 17BB resolved actions ===")
 	for _, a := range tab17.Actions {
-		fmt.Printf("  %s: %v\n", a.Name, a.Hands)
+		fmt.Printf("  %s: %v\n", a.Name, handNames(a.Hands))
 	}
 }
 
@@ -171,17 +370,16 @@ tab_ranges:
 	for _, tr := range rf.Tabs {
 		fmt.Printf("\n%s:\n", tr.Tab)
 		for _, a := range tr.Actions {
-			fmt.Printf("  %s: %v\n", a.Name, a.Hands)
+			fmt.Printf("  %s: %v\n", a.Name, handNames(a.Hands))
 		}
 	}
 
-	// Check 30BB
 	tab30 := rf.Tabs[1]
 	found := false
 	for _, a := range tab30.Actions {
 		if a.Name == "raise_mid_freq" {
 			found = true
-			if !contains(a.Hands, "J3s") {
+			if !containsHand(a.Hands, "J3s") {
 				t.Error("30BB raise_mid_freq should contain J3s")
 			}
 		}
@@ -190,23 +388,30 @@ tab_ranges:
 		t.Error("30BB should have raise_mid_freq action")
 	}
 
-	// Check 17BB - J3s and T4s should be REMOVED
 	tab17 := rf.Tabs[2]
 	for _, a := range tab17.Actions {
-		if a.Name == "raise_mid_freq" && contains(a.Hands, "J3s") {
-			t.Errorf("17BB raise_mid_freq should NOT contain J3s, got: %v", a.Hands)
+		if a.Name == "raise_mid_freq" && containsHand(a.Hands, "J3s") {
+			t.Errorf("17BB raise_mid_freq should NOT contain J3s, got: %v", handNames(a.Hands))
 		}
-		if a.Name == "raise_high_freq" && contains(a.Hands, "T4s") {
-			t.Errorf("17BB raise_high_freq should NOT contain T4s, got: %v", a.Hands)
+		if a.Name == "raise_high_freq" && containsHand(a.Hands, "T4s") {
+			t.Errorf("17BB raise_high_freq should NOT contain T4s, got: %v", handNames(a.Hands))
 		}
 	}
 }
 
-func contains(slice []string, s string) bool {
-	for _, v := range slice {
-		if v == s {
+func containsHand(entries []HandEntry, name string) bool {
+	for _, e := range entries {
+		if e.Hand == name {
 			return true
 		}
 	}
 	return false
+}
+
+func handNames(entries []HandEntry) []string {
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Hand
+	}
+	return names
 }

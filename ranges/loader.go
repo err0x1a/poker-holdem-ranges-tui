@@ -3,9 +3,40 @@ package ranges
 import (
 	"os"
 	"path/filepath"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 )
+
+// HandEntry represents a hand in an action's hands list.
+// Can be a plain string (100% frequency) or {hand, freq} for mixed strategies.
+type HandEntry struct {
+	Hand string `yaml:"hand"`
+	Freq int    `yaml:"freq"` // 0 means 100% (normal hand)
+}
+
+// UnmarshalYAML handles both string ("AA") and mapping ({hand: AQo, freq: 50}) forms.
+func (h *HandEntry) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		h.Hand = value.Value
+		h.Freq = 0
+		return nil
+	}
+	type rawHandEntry HandEntry
+	var raw rawHandEntry
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	*h = HandEntry(raw)
+	return nil
+}
+
+// ActionDetail holds one action's contribution to a hand
+type ActionDetail struct {
+	Title string
+	Color string
+	Freq  int
+}
 
 // RangeMeta contains only title and description for menu display
 type RangeMeta struct {
@@ -16,12 +47,12 @@ type RangeMeta struct {
 
 // Action represents a single action type with its color and hands
 type Action struct {
-	Name        string   `yaml:"name"`
-	Title       string   `yaml:"title"`
-	Color       string   `yaml:"color"`
-	Hands       []string `yaml:"hands"`
-	AddHands    []string `yaml:"add_hands"`
-	RemoveHands []string `yaml:"remove_hands"`
+	Name        string      `yaml:"name"`
+	Title       string      `yaml:"title"`
+	Color       string      `yaml:"color"`
+	Hands       []HandEntry `yaml:"hands"`
+	AddHands    []string    `yaml:"add_hands"`
+	RemoveHands []string    `yaml:"remove_hands"`
 }
 
 // OppositeRef points to an opposite range file (and optionally a specific tab)
@@ -63,11 +94,6 @@ func (rf *RangeFile) HasTabs() bool {
 	return len(rf.Tabs) > 0
 }
 
-// HandAction stores color for a hand
-type HandAction struct {
-	Color string
-}
-
 // LoadRangeMetas loads only title/description from all YAML files in a directory
 func LoadRangeMetas(dir string) ([]RangeMeta, error) {
 	files, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
@@ -79,7 +105,7 @@ func LoadRangeMetas(dir string) ([]RangeMeta, error) {
 	for _, file := range files {
 		meta, err := loadMeta(file)
 		if err != nil {
-			continue // skip invalid files
+			continue
 		}
 		meta.FilePath = file
 		metas = append(metas, meta)
@@ -88,7 +114,6 @@ func LoadRangeMetas(dir string) ([]RangeMeta, error) {
 	return metas, nil
 }
 
-// loadMeta loads only title and description from a YAML file
 func loadMeta(path string) (RangeMeta, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -144,18 +169,15 @@ func resolveTabs(tabs []TabRange) {
 		}
 		base := &tabs[baseIdx]
 
-		// Inherit details if empty
 		if tr.Details == "" {
 			tabs[i].Details = base.Details
 		}
 
-		// Build map of child actions by name
 		childActions := make(map[string]*Action, len(tr.Actions))
 		for j := range tr.Actions {
 			childActions[tr.Actions[j].Name] = &tr.Actions[j]
 		}
 
-		// Start with base actions, apply overrides
 		var resolved []Action
 		for _, baseAction := range base.Actions {
 			child, hasOverride := childActions[baseAction.Name]
@@ -176,28 +198,30 @@ func resolveTabs(tabs []TabRange) {
 				merged.Color = child.Color
 			}
 
-			// Start with base hands, remove then add
-			hands := make(map[string]bool, len(baseAction.Hands))
-			for _, h := range baseAction.Hands {
-				hands[h] = true
+			handMap := make(map[string]bool, len(baseAction.Hands))
+			handEntries := make(map[string]HandEntry, len(baseAction.Hands))
+			for _, he := range baseAction.Hands {
+				handMap[he.Hand] = true
+				handEntries[he.Hand] = he
 			}
 			for _, h := range child.RemoveHands {
-				delete(hands, h)
+				delete(handMap, h)
+				delete(handEntries, h)
 			}
 			for _, h := range child.AddHands {
-				hands[h] = true
+				handMap[h] = true
+				handEntries[h] = HandEntry{Hand: h, Freq: 0}
 			}
 
-			// Preserve order: base hands (minus removed), then added
-			for _, h := range baseAction.Hands {
-				if hands[h] {
-					merged.Hands = append(merged.Hands, h)
+			for _, he := range baseAction.Hands {
+				if handMap[he.Hand] {
+					merged.Hands = append(merged.Hands, handEntries[he.Hand])
 				}
 			}
 			for _, h := range child.AddHands {
-				if hands[h] {
-					merged.Hands = append(merged.Hands, h)
-					delete(hands, h) // avoid duplicates
+				if handMap[h] {
+					merged.Hands = append(merged.Hands, handEntries[h])
+					delete(handMap, h)
 				}
 			}
 
@@ -205,12 +229,11 @@ func resolveTabs(tabs []TabRange) {
 			delete(childActions, baseAction.Name)
 		}
 
-		// Add new actions not in base
 		for _, child := range tr.Actions {
 			if _, isNew := childActions[child.Name]; isNew {
 				hands := child.Hands
 				if hands == nil {
-					hands = child.AddHands
+					hands = stringsToHandEntries(child.AddHands)
 				}
 				resolved = append(resolved, Action{
 					Name:  child.Name,
@@ -221,19 +244,21 @@ func resolveTabs(tabs []TabRange) {
 			}
 		}
 
-		// Deduplicate: a hand should only appear in one action.
-		// Collect all hands per action, last action wins.
+		// Deduplicate: only non-mixed hands (freq == 0) get last-action-wins.
+		// Mixed hands (freq > 0) can appear in multiple actions.
 		handOwner := make(map[string]string)
 		for _, a := range resolved {
-			for _, h := range a.Hands {
-				handOwner[h] = a.Name
+			for _, he := range a.Hands {
+				if he.Freq == 0 {
+					handOwner[he.Hand] = a.Name
+				}
 			}
 		}
 		for j, a := range resolved {
-			var filtered []string
-			for _, h := range a.Hands {
-				if handOwner[h] == a.Name {
-					filtered = append(filtered, h)
+			var filtered []HandEntry
+			for _, he := range a.Hands {
+				if he.Freq > 0 || handOwner[he.Hand] == a.Name {
+					filtered = append(filtered, he)
 				}
 			}
 			resolved[j].Hands = filtered
@@ -243,49 +268,66 @@ func resolveTabs(tabs []TabRange) {
 	}
 }
 
-// ActionsToHandColors converts a slice of actions to a map of hand -> color
-func ActionsToHandColors(actions []Action) map[string]string {
-	colors := make(map[string]string)
+func stringsToHandEntries(names []string) []HandEntry {
+	entries := make([]HandEntry, len(names))
+	for i, n := range names {
+		entries[i] = HandEntry{Hand: n}
+	}
+	return entries
+}
+
+// ActionsToHandDetails converts actions to a hand->details map.
+// All hands get entries (normal hands at 100%, mixed at their freq).
+// Details are sorted by freq descending so [0] is the dominant action.
+func ActionsToHandDetails(actions []Action) map[string][]ActionDetail {
+	handDetails := make(map[string][]ActionDetail)
+
 	for _, action := range actions {
-		for _, hand := range action.Hands {
-			colors[hand] = action.Color
+		for _, he := range action.Hands {
+			freq := 100
+			if he.Freq > 0 {
+				freq = he.Freq
+			}
+			handDetails[he.Hand] = append(handDetails[he.Hand], ActionDetail{
+				Title: action.Title,
+				Color: action.Color,
+				Freq:  freq,
+			})
 		}
 	}
-	return colors
+
+	for hand, details := range handDetails {
+		if len(details) > 1 {
+			sort.Slice(details, func(i, j int) bool {
+				return details[i].Freq > details[j].Freq
+			})
+			handDetails[hand] = details
+		}
+	}
+
+	return handDetails
 }
 
-// ToHandColors converts a RangeFile to a map of hand -> color for rendering
-func (rf *RangeFile) ToHandColors() map[string]string {
-	return ActionsToHandColors(rf.Actions)
-}
-
-// GetLegend returns actions that have at least one hand
-func (rf *RangeFile) GetLegend() []Action {
-	return filterEmptyActions(rf.Actions)
-}
-
-// filterEmptyActions returns only actions with hands
-func filterEmptyActions(actions []Action) []Action {
-	var filtered []Action
+// buildLegend returns actions that have at least one hand, for legend display.
+func buildLegend(actions []Action) []Action {
+	var legend []Action
 	for _, a := range actions {
 		if len(a.Hands) > 0 {
-			filtered = append(filtered, a)
+			legend = append(legend, a)
 		}
 	}
-	return filtered
+	return legend
 }
 
 // TabDisplayData holds precomputed display data for a single tab (exported for opposite loading)
 type TabDisplayData = tabDisplayData
 
 // LoadOppositeData loads the opposite range data given a base file path and an OppositeRef.
-// Returns nil if the opposite file cannot be loaded.
 func LoadOppositeData(basePath string, ref OppositeRef) *tabDisplayData {
 	return LoadOppositeDataCached(basePath, ref, nil)
 }
 
-// LoadOppositeDataCached is like LoadOppositeData but uses a cache to avoid re-reading
-// the same YAML file when multiple tabs reference the same opposite file.
+// LoadOppositeDataCached is like LoadOppositeData but uses a cache to avoid re-reading files.
 func LoadOppositeDataCached(basePath string, ref OppositeRef, fileCache map[string]*RangeFile) *tabDisplayData {
 	dir := filepath.Dir(basePath)
 	oppPath := filepath.Clean(filepath.Join(dir, ref.File))
@@ -323,13 +365,12 @@ func LoadOppositeDataCached(basePath string, ref OppositeRef, fileCache map[stri
 	}
 
 	return &tabDisplayData{
-		handColors: ActionsToHandColors(actions),
-		legend:     filterEmptyActions(actions),
-		details:    details,
+		handDetails: ActionsToHandDetails(actions),
+		legend:      buildLegend(actions),
+		details:     details,
 	}
 }
 
-// findTab finds a tab by name, or returns the first tab if name is empty
 func findTab(tabs []TabRange, name string) *TabRange {
 	if len(tabs) == 0 {
 		return nil

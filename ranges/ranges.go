@@ -1,31 +1,46 @@
 package ranges
 
 import (
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Grid cell dimensions (border + padding + content).
+// Used by both View() and HandleClick() to keep rendering and click detection in sync.
+const (
+	cellW = 7 // NormalBorder(2) + Padding(0,1)(2) + content(3)
+	cellH = 3 // NormalBorder(2) + content(1)
+)
+
+// allCards is the pre-computed 13x13 hand grid (always the same).
+var allCards = generateCards()
+
 // tabDisplayData holds precomputed display data for a single tab
 type tabDisplayData struct {
-	handColors map[string]string
-	legend     []Action
-	details    string
+	handDetails map[string][]ActionDetail
+	legend      []Action
+	details     string
 }
 
 // Model represents the state of the ranges view.
 type Model struct {
-	cards      []string
-	handColors map[string]string
-	legend     []Action
-	details    string
-	tabIndex   int
-	tabs       []TabRange
-	tabCache   []tabDisplayData
+	handDetails map[string][]ActionDetail
+	legend      []Action
+	details     string
+	tabIndex    int
+	tabs        []TabRange
+	tabCache    []tabDisplayData
+
+	// Cursor navigation
+	cursorRow    int
+	cursorCol    int
+	cursorActive bool
 
 	// Opposite range toggle
-	oppositeData    []*tabDisplayData // one per tab (or single element for no-tab files)
+	oppositeData    []*tabDisplayData
 	showingOpposite bool
 	oppositeLabel   string
 	savedDisplay    *tabDisplayData
@@ -33,21 +48,15 @@ type Model struct {
 
 // New creates a new model with the generated poker hands.
 func New() Model {
-	return Model{
-		cards:      Generate(),
-		handColors: make(map[string]string),
-		legend:     nil,
-		details:    "",
-	}
+	return Model{}
 }
 
-// NewWithRange creates a model with a specific range loaded
-func NewWithRange(handColors map[string]string, legend []Action, details string) Model {
+// NewWithRange creates a model from actions and details
+func NewWithRange(actions []Action, details string) Model {
 	return Model{
-		cards:      Generate(),
-		handColors: handColors,
-		legend:     legend,
-		details:    details,
+		handDetails: ActionsToHandDetails(actions),
+		legend:      buildLegend(actions),
+		details:     details,
 	}
 }
 
@@ -56,25 +65,23 @@ func NewWithTabs(tabs []TabRange) Model {
 	cache := make([]tabDisplayData, len(tabs))
 	for i, tr := range tabs {
 		cache[i] = tabDisplayData{
-			handColors: ActionsToHandColors(tr.Actions),
-			legend:     filterEmptyActions(tr.Actions),
-			details:    tr.Details,
+			handDetails: ActionsToHandDetails(tr.Actions),
+			legend:      buildLegend(tr.Actions),
+			details:     tr.Details,
 		}
 	}
 
 	return Model{
-		cards:      Generate(),
-		handColors: cache[0].handColors,
-		legend:     cache[0].legend,
-		details:    cache[0].details,
-		tabIndex:   0,
-		tabs:       tabs,
-		tabCache:   cache,
+		handDetails: cache[0].handDetails,
+		legend:      cache[0].legend,
+		details:     cache[0].details,
+		tabIndex:    0,
+		tabs:        tabs,
+		tabCache:    cache,
 	}
 }
 
 // SetOppositeData sets the opposite range data and label for toggle display.
-// For tab files, pass one *tabDisplayData per tab; for non-tab files, pass a single element.
 func (m *Model) SetOppositeData(data []*tabDisplayData, label string) {
 	m.oppositeData = data
 	m.oppositeLabel = label
@@ -92,7 +99,7 @@ func (m Model) TabIndex() int {
 
 // applyDisplay updates the model's display fields from a tabDisplayData
 func (m *Model) applyDisplay(d *tabDisplayData) {
-	m.handColors = d.handColors
+	m.handDetails = d.handDetails
 	m.legend = d.legend
 	m.details = d.details
 }
@@ -107,6 +114,16 @@ func (m *Model) SetTabIndex(index int) {
 	}
 }
 
+// WantsKey returns true if the ranges model wants to handle this key,
+// preventing it from reaching the list model.
+func (m Model) WantsKey(key string) bool {
+	switch key {
+	case "h", "j", "k", "l", "up", "down", "left", "right":
+		return true
+	}
+	return false
+}
+
 // Init initializes the model.
 func (m Model) Init() tea.Cmd {
 	return nil
@@ -116,17 +133,41 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch keyMsg.String() {
+		case "h", "left":
+			m.cursorActive = true
+			if m.cursorCol > 0 {
+				m.cursorCol--
+			}
+			return m, nil
+		case "j", "down":
+			m.cursorActive = true
+			if m.cursorRow < 12 {
+				m.cursorRow++
+			}
+			return m, nil
+		case "k", "up":
+			m.cursorActive = true
+			if m.cursorRow > 0 {
+				m.cursorRow--
+			}
+			return m, nil
+		case "l", "right":
+			m.cursorActive = true
+			if m.cursorCol < 12 {
+				m.cursorCol++
+			}
+			return m, nil
 		case "o":
 			m.toggleOpposite()
 			return m, nil
-		case "left":
-			if len(m.tabs) > 0 && m.tabIndex > 0 {
-				m.SetTabIndex(m.tabIndex - 1)
-			}
-			return m, nil
-		case "right":
+		case "tab":
 			if len(m.tabs) > 0 && m.tabIndex < len(m.tabs)-1 {
 				m.SetTabIndex(m.tabIndex + 1)
+			}
+			return m, nil
+		case "shift+tab":
+			if len(m.tabs) > 0 && m.tabIndex > 0 {
+				m.SetTabIndex(m.tabIndex - 1)
 			}
 			return m, nil
 		}
@@ -161,18 +202,31 @@ func (m *Model) toggleOpposite() {
 		m.showingOpposite = false
 	} else {
 		m.savedDisplay = &tabDisplayData{
-			handColors: m.handColors,
-			legend:     m.legend,
-			details:    m.details,
+			handDetails: m.handDetails,
+			legend:      m.legend,
+			details:     m.details,
 		}
 		m.applyDisplay(opp)
 		m.showingOpposite = true
 	}
 }
 
-// ActionType represents the type of action for a hand
-// Deprecated: Use dynamic colors from YAML instead
-type ActionType int
+// HandleClick handles a mouse click at the given coordinates relative to the grid view.
+func (m *Model) HandleClick(x, y int) {
+	gridOffsetY := 0
+	if len(m.tabs) > 0 || m.currentOpposite() != nil {
+		gridOffsetY = 1
+	}
+
+	row := (y - gridOffsetY) / cellH
+	col := x / cellW
+
+	if row >= 0 && row < 13 && col >= 0 && col < 13 {
+		m.cursorRow = row
+		m.cursorCol = col
+		m.cursorActive = true
+	}
+}
 
 // View renders the model's state.
 func (m Model) View() string {
@@ -182,29 +236,36 @@ func (m Model) View() string {
 		Padding(0, 1).
 		Margin(0)
 
-	// Default gray style for all hands
 	grayStyle := baseStyle.
 		BorderForeground(lipgloss.Color("#666666")).
 		Foreground(lipgloss.Color("#666666"))
 
 	var allRows []string
-	for i := 0; i < len(m.cards); i += 13 {
-		end := i + 13
-		end = min(end, len(m.cards))
-		rowCards := m.cards[i:end]
-
+	for row := 0; row < 13; row++ {
 		var renderedRow []string
-		for _, card := range rowCards {
+		for col := 0; col < 13; col++ {
+			card := allCards[row*13+col]
 			hand := strings.TrimSpace(card)
-			color, hasColor := m.handColors[hand]
+			details := m.handDetails[hand]
 			var style lipgloss.Style
-			if hasColor {
+			if len(details) > 0 {
+				color := details[0].Color
 				style = baseStyle.
 					BorderForeground(lipgloss.Color(color)).
 					Foreground(lipgloss.Color(color))
+				if len(details) > 1 {
+					style = style.Underline(true)
+				}
 			} else {
 				style = grayStyle
 			}
+
+			if m.cursorActive && row == m.cursorRow && col == m.cursorCol {
+				style = style.
+					BorderStyle(lipgloss.ThickBorder()).
+					BorderForeground(lipgloss.Color("#FFFFFF"))
+			}
+
 			renderedRow = append(renderedRow, style.Render(card))
 		}
 		allRows = append(allRows, lipgloss.JoinHorizontal(lipgloss.Top, renderedRow...))
@@ -248,9 +309,8 @@ func (m Model) View() string {
 		if len(m.tabs) > 1 {
 			hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
 			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center,
-				hintStyle.Render("← "),
 				lipgloss.JoinHorizontal(lipgloss.Center, tabItems...),
-				hintStyle.Render(" →"),
+				hintStyle.Render(" ⇥"),
 			)
 		} else {
 			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center, tabItems...)
@@ -260,7 +320,6 @@ func (m Model) View() string {
 		}
 		grid = lipgloss.JoinVertical(lipgloss.Left, tabSelector, grid)
 	} else if eyeIndicator != "" {
-		// No tabs — put eye indicator on its own line above grid
 		grid = lipgloss.JoinVertical(lipgloss.Right, eyeIndicator, grid)
 	}
 
@@ -280,8 +339,9 @@ func (m Model) View() string {
 		gridWithLegend = grid
 	}
 
-	// Add details panel on the right
-	if m.details != "" {
+	// Build right panel: hand details (when cursor active) or strategy details
+	panelContent := m.buildDetailsPanel()
+	if panelContent != "" {
 		detailsStyle := lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#666666")).
@@ -290,32 +350,70 @@ func (m Model) View() string {
 		if len(m.tabs) > 0 {
 			detailsStyle = detailsStyle.MarginTop(1)
 		}
-		detailsPanel := detailsStyle.Render(m.details)
+		detailsPanel := detailsStyle.Render(panelContent)
 		return lipgloss.JoinHorizontal(lipgloss.Top, gridWithLegend, detailsPanel)
 	}
 
 	return gridWithLegend
 }
 
-// Generate creates a slice of all 169 possible poker hands.
-func Generate() []string {
+// buildDetailsPanel returns the content for the right-side details panel.
+// Shows hand action breakdown when cursor is on a hand, otherwise strategy details.
+func (m Model) buildDetailsPanel() string {
+	if m.cursorActive {
+		hand := strings.TrimSpace(allCards[m.cursorRow*13+m.cursorCol])
+		if details, ok := m.handDetails[hand]; ok {
+			return m.renderHandDetails(hand, details)
+		}
+	}
+	return m.details
+}
+
+// renderHandDetails formats a hand's action breakdown for the details panel
+func (m Model) renderHandDetails(hand string, details []ActionDetail) string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true)
+	b.WriteString(titleStyle.Render(hand))
+	b.WriteString("\n\n")
+
+	for _, d := range details {
+		colorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(d.Color))
+		fmt.Fprintf(&b, "%s %-12s %d%%\n", colorStyle.Render("■"), d.Title, d.Freq)
+	}
+
+	if m.details != "" {
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("─────────────────"))
+		b.WriteString("\n\n")
+		b.WriteString(m.details)
+	}
+
+	return b.String()
+}
+
+// generateCards creates the 13x13 poker hand grid.
+func generateCards() []string {
 	ranks := []string{"A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"}
 	cards := make([]string, 0, 13*13)
 	for i, rankI := range ranks {
 		for j, rankJ := range ranks {
 			var hand string
 			if i == j {
-				// Pocket pairs
 				hand = " " + rankI + rankJ + ""
 			} else if i < j {
-				// Suited hands
 				hand = rankI + rankJ + "s"
 			} else {
-				// Off-suit hands
 				hand = rankJ + rankI + "o"
 			}
 			cards = append(cards, hand)
 		}
 	}
 	return cards
+}
+
+// Generate returns the pre-computed hand grid (kept for backward compat).
+func Generate() []string {
+	return allCards
 }

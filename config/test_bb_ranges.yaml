@@ -36,11 +36,22 @@ tab_ranges:
       Medium stack EP open
     actions:
       - name: raise
-        add_hands: ["99", ATs, KQs, AQo]
+        add_hands: ["99", ATs, KQs]
       - name: allin
         title: "All-In"
         color: "#FF8A80"
-        hands: ["88", "77"]
+        hands:
+          - "88"
+          - "77"
+          - hand: AQo
+            freq: 50
+      - name: call
+        title: "Call"
+        color: "#FFFFFF"
+        hands:
+          - KJs
+          - hand: AQo
+            freq: 50
 
   - tab: "12-25"
     base: "25-40"
