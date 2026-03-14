@@ -157,7 +157,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursorCol++
 			}
 			return m, nil
-		case "o":
+		case "ctrl+o":
 			m.toggleOpposite()
 			return m, nil
 		case "tab":
