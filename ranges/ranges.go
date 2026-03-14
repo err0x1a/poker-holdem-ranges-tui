@@ -256,8 +256,8 @@ func (m Model) View() string {
 					totalFreq += d.Freq
 				}
 
-				// Use split border progression when not 100% or when mixed hands with close freqs
-				if totalFreq < 100 || (len(details) >= 2 && abs(details[0].Freq-details[1].Freq) < 20) {
+				// Use split border progression when not 100% or when hand has multiple actions
+				if totalFreq < 100 || len(details) >= 2 {
 					renderedRow = append(renderedRow, renderSplitBorderCell(card, details, totalFreq, isCursor))
 				} else {
 					style := baseStyle.
