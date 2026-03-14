@@ -8,16 +8,18 @@ Set Shell "bash"
 Set TypingSpeed 250ms
 
 Hide
-Type "export PATH=$PATH:/home/asyncerror/developer/poker-holdem-ranges-tui && cd /home/asyncerror/developer/poker-holdem-ranges-tui && clear"
+Type "export PATH=$PATH:/home/asyncerror/developer/poker-holdem-ranges-tui/tmp && cd /home/asyncerror/developer/poker-holdem-ranges-tui && clear"
 Enter
 Sleep 1s
 Show
 
-Type "phr-tui examples/"
+Type "main examples/"
 Enter
 Sleep 3s
 
 # Navigate list to tab range file
+Ctrl+N
+Sleep 2s
 Ctrl+N
 Sleep 2s
 Ctrl+N
@@ -39,7 +41,7 @@ Sleep 3s
 Tab
 Sleep 3s
 
-# Navigate to mixed hand
+# Navigate to mixed hand to show border progression
 Type "k"
 Sleep 1s
 Type "l"
@@ -49,12 +51,12 @@ Sleep 3s
 Ctrl+N
 Sleep 3s
 
-# Toggle opposite range
-Type "o"
+# Toggle opposite range (Ctrl+O)
+Ctrl+O
 Sleep 4s
 
 # Back to original
-Type "o"
+Ctrl+O
 Sleep 2s
 
 Type "q"
