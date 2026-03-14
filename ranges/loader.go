@@ -33,9 +33,10 @@ func (h *HandEntry) UnmarshalYAML(value *yaml.Node) error {
 
 // ActionDetail holds one action's contribution to a hand
 type ActionDetail struct {
-	Title string
-	Color string
-	Freq  int
+	Title     string
+	Color     string
+	Freq      int
+	RaiseSize string
 }
 
 // RangeMeta contains only title and description for menu display
@@ -50,6 +51,7 @@ type Action struct {
 	Name        string      `yaml:"name"`
 	Title       string      `yaml:"title"`
 	Color       string      `yaml:"color"`
+	RaiseSize   string      `yaml:"raise_size,omitempty"` // e.g. "2.5x", "3bb", "all-in"
 	Hands       []HandEntry `yaml:"hands"`
 	AddHands    []string    `yaml:"add_hands"`
 	RemoveHands []string    `yaml:"remove_hands"`
@@ -289,9 +291,10 @@ func ActionsToHandDetails(actions []Action) map[string][]ActionDetail {
 				freq = he.Freq
 			}
 			handDetails[he.Hand] = append(handDetails[he.Hand], ActionDetail{
-				Title: action.Title,
-				Color: action.Color,
-				Freq:  freq,
+				Title:     action.Title,
+				Color:     action.Color,
+				Freq:      freq,
+				RaiseSize: action.RaiseSize,
 			})
 		}
 	}

@@ -2,6 +2,7 @@ package ranges
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -237,8 +238,8 @@ func (m Model) View() string {
 		Margin(0)
 
 	grayStyle := baseStyle.
-		BorderForeground(lipgloss.Color("#666666")).
-		Foreground(lipgloss.Color("#666666"))
+		BorderForeground(lipgloss.Color("#444444")).
+		Foreground(lipgloss.Color("#444444"))
 
 	var allRows []string
 	for row := 0; row < 13; row++ {
@@ -247,15 +248,21 @@ func (m Model) View() string {
 			card := allCards[row*13+col]
 			hand := strings.TrimSpace(card)
 			details := m.handDetails[hand]
+			// Compute effective color once (with dimming if freq < 100%)
 			var style lipgloss.Style
+			var color string
 			if len(details) > 0 {
-				color := details[0].Color
+				color = details[0].Color
+				totalFreq := 0
+				for _, d := range details {
+					totalFreq += d.Freq
+				}
+				if totalFreq < 100 {
+					color = dimColor(color, float64(totalFreq)/100.0)
+				}
 				style = baseStyle.
 					BorderForeground(lipgloss.Color(color)).
 					Foreground(lipgloss.Color(color))
-				if len(details) > 1 {
-					style = style.Underline(true)
-				}
 			} else {
 				style = grayStyle
 			}
@@ -266,7 +273,18 @@ func (m Model) View() string {
 					BorderForeground(lipgloss.Color("#FFFFFF"))
 			}
 
-			renderedRow = append(renderedRow, style.Render(card))
+			// Underline mixed hands; skip leading space on pairs to avoid visual artifact
+			content := card
+			if len(details) > 1 {
+				ul := lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color(color))
+				if card[0] == ' ' {
+					content = " " + ul.Render(card[1:])
+				} else {
+					content = ul.Render(card)
+				}
+			}
+
+			renderedRow = append(renderedRow, style.Render(content))
 		}
 		allRows = append(allRows, lipgloss.JoinHorizontal(lipgloss.Top, renderedRow...))
 	}
@@ -379,7 +397,11 @@ func (m Model) renderHandDetails(hand string, details []ActionDetail) string {
 
 	for _, d := range details {
 		colorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(d.Color))
-		fmt.Fprintf(&b, "%s %-12s %d%%\n", colorStyle.Render("■"), d.Title, d.Freq)
+		line := fmt.Sprintf("%s %-12s %d%%", colorStyle.Render("■"), d.Title, d.Freq)
+		if d.RaiseSize != "" {
+			line += fmt.Sprintf("  (%s)", d.RaiseSize)
+		}
+		b.WriteString(line + "\n")
 	}
 
 	if m.details != "" {
@@ -416,4 +438,21 @@ func generateCards() []string {
 // Generate returns the pre-computed hand grid (kept for backward compat).
 func Generate() []string {
 	return allCards
+}
+
+// dimColor scales a hex color (#RRGGBB) by factor (0.0–1.0) to simulate reduced opacity.
+// Uses a gentle range: factor 0.0 maps to 60% brightness, factor 1.0 maps to 100%.
+func dimColor(hex string, factor float64) string {
+	if len(hex) != 7 || hex[0] != '#' {
+		return hex
+	}
+	// Map factor from [0,1] to [0.35, 1.0]
+	scaled := 0.35 + factor*0.65
+	r, _ := strconv.ParseUint(hex[1:3], 16, 8)
+	g, _ := strconv.ParseUint(hex[3:5], 16, 8)
+	b, _ := strconv.ParseUint(hex[5:7], 16, 8)
+	r = uint64(float64(r) * scaled)
+	g = uint64(float64(g) * scaled)
+	b = uint64(float64(b) * scaled)
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }
