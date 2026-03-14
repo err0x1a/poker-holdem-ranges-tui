@@ -2,7 +2,6 @@ package ranges
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -248,43 +247,34 @@ func (m Model) View() string {
 			card := allCards[row*13+col]
 			hand := strings.TrimSpace(card)
 			details := m.handDetails[hand]
-			// Compute effective color once (with dimming if freq < 100%)
-			var style lipgloss.Style
-			var color string
+			isCursor := m.cursorActive && row == m.cursorRow && col == m.cursorCol
+
 			if len(details) > 0 {
-				color = details[0].Color
+				color := details[0].Color
 				totalFreq := 0
 				for _, d := range details {
 					totalFreq += d.Freq
 				}
-				if totalFreq < 100 {
-					color = dimColor(color, float64(totalFreq)/100.0)
-				}
-				style = baseStyle.
-					BorderForeground(lipgloss.Color(color)).
-					Foreground(lipgloss.Color(color))
-			} else {
-				style = grayStyle
-			}
 
-			if m.cursorActive && row == m.cursorRow && col == m.cursorCol {
-				style = style.
-					BorderStyle(lipgloss.ThickBorder()).
-					BorderForeground(lipgloss.Color("#FFFFFF"))
-			}
-
-			// Underline mixed hands; skip leading space on pairs to avoid visual artifact
-			content := card
-			if len(details) > 1 {
-				ul := lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color(color))
-				if card[0] == ' ' {
-					content = " " + ul.Render(card[1:])
+				// Use split border progression when not 100% or when mixed hands with close freqs
+				if totalFreq < 100 || (len(details) >= 2 && abs(details[0].Freq-details[1].Freq) < 20) {
+					renderedRow = append(renderedRow, renderSplitBorderCell(card, details, totalFreq, isCursor))
 				} else {
-					content = ul.Render(card)
+					style := baseStyle.
+						BorderForeground(lipgloss.Color(color)).
+						Foreground(lipgloss.Color(color))
+					if isCursor {
+						style = style.Background(lipgloss.Color("#333333"))
+					}
+					renderedRow = append(renderedRow, style.Render(card))
 				}
+			} else {
+				style := grayStyle
+				if isCursor {
+					style = style.Background(lipgloss.Color("#333333"))
+				}
+				renderedRow = append(renderedRow, style.Render(card))
 			}
-
-			renderedRow = append(renderedRow, style.Render(content))
 		}
 		allRows = append(allRows, lipgloss.JoinHorizontal(lipgloss.Top, renderedRow...))
 	}
@@ -431,19 +421,87 @@ func Generate() []string {
 	return allCards
 }
 
-// dimColor scales a hex color (#RRGGBB) by factor (0.0–1.0) to simulate reduced opacity.
-// Uses a gentle range: factor 0.0 maps to 60% brightness, factor 1.0 maps to 100%.
-func dimColor(hex string, factor float64) string {
-	if len(hex) != 7 || hex[0] != '#' {
-		return hex
+// renderSplitBorderCell renders a cell with a left-to-right color progression on
+// the top and bottom borders based on the frequency split between actions.
+func renderSplitBorderCell(card string, details []ActionDetail, totalFreq int, selected bool) string {
+	const innerW = 5 // padding(1) + content(3) + padding(1)
+	const foldColor = "#444444"
+
+	foldFreq := 100 - totalFreq
+	if foldFreq < 0 {
+		foldFreq = 0
 	}
-	// Map factor from [0,1] to [0.35, 1.0]
-	scaled := 0.35 + factor*0.65
-	r, _ := strconv.ParseUint(hex[1:3], 16, 8)
-	g, _ := strconv.ParseUint(hex[3:5], 16, 8)
-	b, _ := strconv.ParseUint(hex[5:7], 16, 8)
-	r = uint64(float64(r) * scaled)
-	g = uint64(float64(g) * scaled)
-	b = uint64(float64(b) * scaled)
-	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+
+	// Build segment list: actions + fold remainder
+	type segment struct {
+		color string
+		chars int
+	}
+	segs := make([]segment, 0, len(details)+1)
+	freqs := make([]int, 0, len(details)+1)
+	for _, d := range details {
+		segs = append(segs, segment{d.Color, 0})
+		freqs = append(freqs, d.Freq)
+	}
+	if foldFreq > 0 {
+		segs = append(segs, segment{foldColor, 0})
+		freqs = append(freqs, foldFreq)
+	}
+
+	// Distribute innerW chars proportionally
+	assigned := 0
+	for i, f := range freqs {
+		segs[i].chars = int(float64(innerW)*float64(f)/100.0 + 0.5)
+		assigned += segs[i].chars
+	}
+	for assigned != innerW {
+		maxIdx := 0
+		for i := range freqs {
+			if freqs[i] > freqs[maxIdx] {
+				maxIdx = i
+			}
+		}
+		if assigned > innerW {
+			segs[maxIdx].chars--
+			assigned--
+		} else {
+			segs[maxIdx].chars++
+			assigned++
+		}
+	}
+
+	// Build horizontal border string once, reuse for top and bottom
+	var hb strings.Builder
+	for _, seg := range segs {
+		if seg.chars > 0 {
+			s := lipgloss.NewStyle().Foreground(lipgloss.Color(seg.color))
+			hb.WriteString(s.Render(strings.Repeat("─", seg.chars)))
+		}
+	}
+	hBorder := hb.String()
+
+	sf := lipgloss.NewStyle().Foreground(lipgloss.Color(segs[0].color))
+	sl := lipgloss.NewStyle().Foreground(lipgloss.Color(segs[len(segs)-1].color))
+	st := lipgloss.NewStyle().Foreground(lipgloss.Color(details[0].Color))
+
+	top := sf.Render("┌") + hBorder + sl.Render("┐")
+	pad := " "
+	if selected {
+		bg := lipgloss.Color("#333333")
+		pad = lipgloss.NewStyle().Background(bg).Render(" ")
+		st = st.Background(bg)
+	}
+	mid := sf.Render("│") + pad + st.Render(card) + pad + sl.Render("│")
+	bot := sf.Render("└") + hBorder + sl.Render("┘")
+
+	return top + "\n" + mid + "\n" + bot
 }
+
+// abs returns the absolute value of an integer.
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
