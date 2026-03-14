@@ -1,0 +1,64 @@
+title: "CO vs BTN 3-bet"
+description: "CO response facing BTN 3-bet"
+details: |
+  CO opens, BTN 3-bets.
+  Mixed strategy with
+  call/4-bet/fold spots.
+
+  Click legend to isolate
+  actions.
+opposite:
+  file: "05_bb_vs_btn.yaml"
+actions:
+  - name: fourbet
+    title: "4-bet"
+    color: "#20bf55"
+    raise_size: "2.5x"
+    hands:
+      - AA
+      - KK
+      - hand: QQ
+        freq: 70
+      - hand: AKs
+        freq: 60
+      - hand: AKo
+        freq: 50
+
+  - name: call
+    title: "Call"
+    color: "#FFFFFF"
+    hands:
+      - hand: QQ
+        freq: 30
+      - JJ
+      - TT
+      - hand: AKs
+        freq: 40
+      - hand: AKo
+        freq: 50
+      - AQs
+      - AJs
+      - KQs
+      - hand: ATs
+        freq: 50
+      - hand: KJs
+        freq: 60
+      - QJs
+      - JTs
+      - T9s
+      - 99
+      - 88
+      - 77
+
+  - name: bluff4bet
+    title: "4-bet Bluff"
+    color: "#FFD166"
+    hands:
+      - hand: A5s
+        freq: 50
+      - hand: A4s
+        freq: 50
+      - hand: ATs
+        freq: 50
+      - hand: KJs
+        freq: 40

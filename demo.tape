@@ -23,8 +23,6 @@ Sleep 2s
 Ctrl+N
 Sleep 2s
 Ctrl+N
-Sleep 2s
-Ctrl+N
 Sleep 3s
 
 # Grid cursor navigation
@@ -37,21 +35,51 @@ Sleep 1s
 Type "j"
 Sleep 3s
 
-# Switch tab
+# Switch tab to show mixed hands with border progression
 Tab
 Sleep 3s
 
-# Navigate to mixed hand to show border progression
+# Navigate to mixed hand
 Type "k"
 Sleep 1s
 Type "l"
 Sleep 3s
 
-# Navigate to opposite range example
+# Go to CO vs BTN 3-bet example (lots of mixed hands)
+Ctrl+N
+Sleep 2s
 Ctrl+N
 Sleep 3s
 
-# Toggle opposite range (Ctrl+O)
+# Navigate to QQ (mixed 4-bet/call)
+Type "h"
+Sleep 500ms
+Type "h"
+Sleep 500ms
+Type "h"
+Sleep 500ms
+Type "k"
+Sleep 500ms
+Type "k"
+Sleep 3s
+
+# Navigate to AKo (mixed 4-bet/call)
+Type "l"
+Sleep 500ms
+Type "l"
+Sleep 500ms
+Type "l"
+Sleep 3s
+
+# Navigate to ATs (mixed call/bluff)
+Type "j"
+Sleep 500ms
+Type "j"
+Sleep 500ms
+Type "j"
+Sleep 3s
+
+# Toggle opposite range
 Ctrl+O
 Sleep 4s
 
