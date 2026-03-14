@@ -138,6 +138,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selectedFilePath != "" && m.rangesModel.HasTabSelector() {
 			m.tabIndexByFile[m.selectedFilePath] = m.rangesModel.TabIndex()
 		}
+		// Preserve hidden actions across range switches
+		savedHidden := m.rangesModel.HiddenActions()
 		m.selectedFilePath = filePath
 		if rf, err := ranges.LoadRangeFile(filePath); err == nil {
 			if rf.HasTabs() {
@@ -159,6 +161,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			m.rangesModel.SetHiddenActions(savedHidden)
 		}
 	}
 

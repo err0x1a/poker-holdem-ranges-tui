@@ -44,6 +44,9 @@ type Model struct {
 	showingOpposite bool
 	oppositeLabel   string
 	savedDisplay    *tabDisplayData
+
+	// Legend filtering
+	hiddenActions map[string]bool // keyed by action title
 }
 
 // New creates a new model with the generated poker hands.
@@ -85,6 +88,16 @@ func NewWithTabs(tabs []TabRange) Model {
 func (m *Model) SetOppositeData(data []*tabDisplayData, label string) {
 	m.oppositeData = data
 	m.oppositeLabel = label
+}
+
+// HiddenActions returns the current hidden actions filter.
+func (m Model) HiddenActions() map[string]bool {
+	return m.hiddenActions
+}
+
+// SetHiddenActions restores a previously saved hidden actions filter.
+func (m *Model) SetHiddenActions(h map[string]bool) {
+	m.hiddenActions = h
 }
 
 // HasTabSelector returns true if the model has a tab selector bar
@@ -218,6 +231,14 @@ func (m *Model) HandleClick(x, y int) {
 		gridOffsetY = 1
 	}
 
+	// Check if click is on the legend row
+	// Legend is at: gridOffsetY + 13*cellH (grid) + 1 (empty line)
+	legendY := gridOffsetY + 13*cellH + 1
+	if y == legendY && len(m.legend) > 0 {
+		m.handleLegendClick(x)
+		return
+	}
+
 	row := (y - gridOffsetY) / cellH
 	col := x / cellW
 
@@ -225,6 +246,24 @@ func (m *Model) HandleClick(x, y int) {
 		m.cursorRow = row
 		m.cursorCol = col
 		m.cursorActive = true
+	}
+}
+
+// handleLegendClick toggles action visibility based on click position in the legend.
+func (m *Model) handleLegendClick(x int) {
+	// Reconstruct legend item positions: "■ Title  ■ Title  ■ Title"
+	// Each item is "■ " + title, separated by "  " (2 spaces)
+	pos := 0
+	for _, action := range m.legend {
+		itemLen := len([]rune("■ " + action.Title))
+		if x >= pos && x < pos+itemLen {
+			if m.hiddenActions == nil {
+				m.hiddenActions = make(map[string]bool)
+			}
+			m.hiddenActions[action.Title] = !m.hiddenActions[action.Title]
+			return
+		}
+		pos += itemLen + 2 // +2 for "  " separator
 	}
 }
 
@@ -246,7 +285,14 @@ func (m Model) View() string {
 		for col := 0; col < 13; col++ {
 			card := allCards[row*13+col]
 			hand := strings.TrimSpace(card)
-			details := m.handDetails[hand]
+			allDetails := m.handDetails[hand]
+			// Filter out hidden actions
+			var details []ActionDetail
+			for _, d := range allDetails {
+				if !m.hiddenActions[d.Title] {
+					details = append(details, d)
+				}
+			}
 			isCursor := m.cursorActive && row == m.cursorRow && col == m.cursorCol
 
 			if len(details) > 0 {
@@ -327,10 +373,17 @@ func (m Model) View() string {
 	if len(m.legend) > 0 {
 		var legendItems []string
 		for _, action := range m.legend {
-			legendStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(action.Color)).
-				Bold(true)
-			legendItems = append(legendItems, legendStyle.Render("■ "+action.Title))
+			if m.hiddenActions[action.Title] {
+				dimStyle := lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#555555")).
+					Strikethrough(true)
+				legendItems = append(legendItems, dimStyle.Render("■ "+action.Title))
+			} else {
+				legendStyle := lipgloss.NewStyle().
+					Foreground(lipgloss.Color(action.Color)).
+					Bold(true)
+				legendItems = append(legendItems, legendStyle.Render("■ "+action.Title))
+			}
 		}
 		legend := lipgloss.JoinHorizontal(lipgloss.Center, strings.Join(legendItems, "  "))
 		gridWithLegend = lipgloss.JoinVertical(lipgloss.Left, grid, "", legend)
