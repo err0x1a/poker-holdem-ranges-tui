@@ -8,12 +8,15 @@ A terminal-based viewer for your custom Texas Hold'em poker ranges. Create your 
 
 ## Features
 
-- Visual 13x13 hand matrix with action-based coloring
-- Range list with search/filter
-- Details panel with strategic notes
-- Color-coded action legend
-- YAML-based configuration
-- Responsive terminal interface
+- **Hand matrix** — Visual 13x13 grid with color-coded actions and legend
+- **Range list** — Scrollable file browser with search/filter (`/`)
+- **Details panel** — Strategic notes per range, shown alongside the grid
+- **Grid cursor** — Navigate individual hands with `h/j/k/l`, arrows, or mouse click. The selected hand shows its action breakdown in a details panel on the right
+- **Multi-tab ranges** — Define multiple stack-depth variations in a single file (e.g. 40BB+, 25-40BB, 12-25BB). Tabs inherit from a base and can add/remove hands. Switch with `Tab`/`Shift+Tab`
+- **Opposite range** — Link your range to the opponent's range file. Press `o` to toggle and see what the villain is doing — useful for studying how your defense aligns against their opens
+- **Mixed hands** — Hands with partial frequency (e.g. 50% raise, 50% call). Displayed with underline and dimmed color proportional to the frequency
+- **Mouse support** — Click to select files in the list or hands in the grid
+- **YAML configuration** — Simple, readable format with support for `raise_size`, mixed frequencies, tab inheritance, and opposite references
 
 ## Download
 
@@ -74,7 +77,11 @@ Download the [examples](examples/) folder to test:
 
 | Key | Action |
 |-----|--------|
-| `↑/↓` or `j/k` | Navigate list |
+| `h/j/k/l` or `←↑↓→` | Navigate grid |
+| `Ctrl+N` / `Ctrl+P` | Navigate list |
+| `Tab` / `Shift+Tab` | Switch stack tab |
+| `o` | Toggle opposite range |
+| `Mouse click` | Select in list or grid |
 | `/` | Search/filter |
 | `q` or `Ctrl+C` | Quit |
 
@@ -118,6 +125,9 @@ actions:
 | `title` | Action name shown in the legend |
 | `color` | Hex color for the hands (e.g. `#20bf55`) |
 | `hands` | List of hands for this action |
+| `raise_size` | Optional raise sizing label (e.g. `"2.5x"`, `"3x"`) |
+| `add_hands` | Hands to add to the inherited action (only in `tab_ranges` with `base`) |
+| `remove_hands` | Hands to remove from the inherited action (only in `tab_ranges` with `base`) |
 
 ### Hand Notation
 
@@ -125,15 +135,106 @@ actions:
 - **Suited**: `AKs`, `AQs`, `T9s` (same suit)
 - **Offsuit**: `AKo`, `AQo`, `T9o` (different suits)
 
+### Mixed Hands
+
+When a hand has a mixed strategy (e.g. raise 50%, call 50%), you can assign the same hand to multiple actions with different frequencies. Mixed hands appear with an underline indicator in the grid, and their color is dimmed proportionally to the frequency — so a 50% hand appears at half intensity.
+
+The details panel shows the full breakdown when you hover the cursor over a mixed hand.
+
+```yaml
+actions:
+  - name: raise
+    title: "Raise"
+    color: "#20bf55"
+    hands:
+      - AA
+      - hand: AQo
+        freq: 50    # Raise 50% of the time
+
+  - name: call
+    title: "Call"
+    color: "#FFFFFF"
+    hands:
+      - hand: AQo
+        freq: 50    # Call the other 50%
+```
+
+### Tab Ranges
+
+Use `tab_ranges` to group multiple stack-depth variations in a single file. Each tab defines its own actions and details. Switch between tabs with `Tab` / `Shift+Tab`.
+
+Tabs can **inherit** from a base tab using `base`. When inheriting, you only need to define what changes — use `add_hands` to include new hands and `remove_hands` to exclude hands from the inherited action. This avoids duplicating the entire range for each stack depth.
+
+```yaml
+title: "BTN First In (Multi-Stack)"
+description: "BTN open range by stack depth"
+tab_ranges:
+  - tab: "40+"
+    details: |
+      BTN open 40BB+. Standard 2.5x raise.
+    actions:
+      - name: raise
+        title: "Raise"
+        color: "#20bf55"
+        raise_size: "2.5x"
+        hands: [AA, KK, QQ, JJ, TT, AKs, AQs, AKo]
+
+  - tab: "25-40"
+    base: "40+"              # Inherits all actions from "40+"
+    details: |
+      BTN open 25-40BB. Tighter raise, some shoves.
+    actions:
+      - name: raise
+        add_hands: [A9s]     # Add A9s to the inherited raise range
+        remove_hands: [TT]   # Remove TT (now goes all-in instead)
+      - name: allin
+        title: "All-In"
+        color: "#FF8A80"
+        hands: [TT]
+```
+
+### Opposite Range
+
+Link your range to the opponent's range file so you can study both sides of a spot. For example, when viewing your BB defense range, you can press `o` to instantly see the BTN opening range you're defending against — without switching files.
+
+The `file` field points to a YAML file in the same directory. Use `tab` to reference a specific tab when the opponent's file uses `tab_ranges`.
+
+```yaml
+title: "BB vs BTN Raise"
+description: "BB defense vs BTN open"
+opposite:
+  file: "04_btn_first_in_tabs.yaml"   # Opponent's range file
+  tab: "40+"                           # Specific tab (optional)
+details: |
+  BB defense vs BTN 2.5x open.
+  Press 'o' to see villain's opening range.
+actions:
+  - name: call
+    title: "Call"
+    color: "#FFFFFF"
+    hands: [AJs, ATs, KQs, KJs, QJs, JTs, T9s, 99, 88, 77, 66, 55, 44]
+  - name: reraise
+    title: "3-bet"
+    color: "#20bf55"
+    hands: [AA, KK, QQ, JJ, TT, AKs, AKo]
+```
+
+When you press `o`, the grid switches to show the villain's range with an eye indicator on the tab bar. Press `o` again to return to your range.
+
 ### Recommended Color Palette
 
 | Color | Hex | Usage |
 |-------|-----|-------|
 | Green | `#20bf55` | Raise, 3-bet value |
+| Teal | `#06d6a0` | 3-bet aggressive |
 | White | `#FFFFFF` | Call, Limp |
-| Yellow | `#FFD166` | Bluff, 3-bet bluff |
+| Yellow | `#FFD166` | Bluff, 3-bet bluff, lesser value |
 | Light Red | `#FF8A80` | All-in |
-
+| Dark Red | `#cc2936` | All-in (alternative) |
+| Pink | `#F48FB1` | All-in value (high equity) |
+| Light Blue | `#90CAF9` | All-in fold equity |
+| Orange | `#FF8800` | Table adjustments (no 3-bet, with ante) |
+| Blue | `#4488FF` | Optional, situational |
 
 ## Suggested Config Organization
 

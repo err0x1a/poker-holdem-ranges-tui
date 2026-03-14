@@ -323,16 +323,7 @@ func (m Model) View() string {
 				tabItems = append(tabItems, dimStyle.Render(tr.Tab))
 			}
 		}
-		var tabSelector string
-		if len(m.tabs) > 1 {
-			hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
-			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center,
-				lipgloss.JoinHorizontal(lipgloss.Center, tabItems...),
-				hintStyle.Render(" ⇥"),
-			)
-		} else {
-			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center, tabItems...)
-		}
+		tabSelector := lipgloss.JoinHorizontal(lipgloss.Center, tabItems...)
 		if eyeIndicator != "" {
 			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center, tabSelector, eyeIndicator)
 		}

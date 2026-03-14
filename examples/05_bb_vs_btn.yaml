@@ -1,0 +1,17 @@
+title: "BB vs BTN Raise"
+description: "BB defense vs BTN open"
+opposite:
+  file: "04_btn_first_in_tabs.yaml"
+  tab: "40+"
+details: |
+  BB defense vs BTN 2.5x
+  Wide calling range
+actions:
+  - name: call
+    title: "Call"
+    color: "#FFFFFF"
+    hands: [AJs, ATs, KQs, KJs, QJs, JTs, T9s, 99, 88, 77, 66, 55, 44]
+  - name: reraise
+    title: "3-bet"
+    color: "#20bf55"
+    hands: [AA, KK, QQ, JJ, TT, AKs, AKo]

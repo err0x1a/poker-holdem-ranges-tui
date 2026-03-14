@@ -1,0 +1,50 @@
+title: "BTN First In (Multi-Stack)"
+description: "BTN open range by stack depth"
+tab_ranges:
+  - tab: "40+"
+    details: |
+      BTN open 40BB+
+      Standard 2.5x raise
+    actions:
+      - name: raise
+        title: "Raise"
+        color: "#20bf55"
+        raise_size: "2.5x"
+        hands: [AA, KK, QQ, JJ, TT, 99, AKs, AQs, AJs, ATs, KQs, KJs, QJs, JTs, AKo, AQo]
+      - name: limp
+        title: "Limp"
+        color: "#FFFFFF"
+        hands: [88, 77, 66, 55, A9s, A8s, KTs, T9s, 98s, 87s, 76s]
+
+  - tab: "25-40"
+    base: "40+"
+    details: |
+      BTN open 25-40BB
+      Tighter, some shoves
+    actions:
+      - name: raise
+        add_hands: [A9s, KTs]
+        remove_hands: [99]
+      - name: allin
+        title: "All-In"
+        color: "#FF8A80"
+        hands:
+          - "99"
+          - hand: AQo
+            freq: 50
+      - name: call_or_raise
+        title: "Call/Raise"
+        color: "#FFD166"
+        hands:
+          - hand: AQo
+            freq: 50
+
+  - tab: "12-25"
+    base: "25-40"
+    details: |
+      BTN push/fold zone
+    actions:
+      - name: raise
+        remove_hands: [88, 77]
+      - name: allin
+        add_hands: [88, 77, A8s]
