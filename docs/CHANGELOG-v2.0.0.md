@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### ✨ Features
 
 - 📑 Multi-tab support with base inheritance (`tab_ranges`, `base`, `add_hands`, `remove_hands`)
-- 👁️ Opposite range toggle — press `o` to view the opponent's range (`opposite.file`, `opposite.tab`)
+- 👁️ Opposite range toggle — press `Ctrl+O` to view the opponent's range (`opposite.file`, `opposite.tab`)
 - 🔀 Mixed hands with frequency — same hand in multiple actions with `freq` field
 - 🎯 Grid cursor navigation with `h/j/k/l`, arrows, and mouse click
 - 📊 Hand details panel — action breakdown on cursor hover for each hand

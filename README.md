@@ -13,8 +13,9 @@ A terminal-based viewer for your custom Texas Hold'em poker ranges. Create your 
 - **Details panel** — Strategic notes per range, shown alongside the grid
 - **Grid cursor** — Navigate individual hands with `h/j/k/l`, arrows, or mouse click. The selected hand shows its action breakdown in a details panel on the right
 - **Multi-tab ranges** — Define multiple stack-depth variations in a single file (e.g. 40BB+, 25-40BB, 12-25BB). Tabs inherit from a base and can add/remove hands. Switch with `Tab`/`Shift+Tab`
-- **Opposite range** — Link your range to the opponent's range file. Press `o` to toggle and see what the villain is doing — useful for studying how your defense aligns against their opens
-- **Mixed hands** — Hands with partial frequency (e.g. 50% raise, 50% call). Displayed with underline and dimmed color proportional to the frequency
+- **Opposite range** — Link your range to the opponent's range file. Press `Ctrl+O` to toggle and see what the villain is doing — useful for studying how your defense aligns against their opens
+- **Legend filtering** — Click on a legend item to hide/show that action across all ranges. Useful for isolating specific actions to study
+- **Mixed hands** — Hands with partial frequency (e.g. 50% raise, 50% call). Cell borders show a left-to-right color progression proportional to each action's frequency, with the remaining percentage shown in gray (fold)
 - **Mouse support** — Click to select files in the list or hands in the grid
 - **YAML configuration** — Simple, readable format with support for `raise_size`, mixed frequencies, tab inheritance, and opposite references
 
@@ -80,8 +81,9 @@ Download the [examples](examples/) folder to test:
 | `h/j/k/l` or `←↑↓→` | Navigate grid |
 | `Ctrl+N` / `Ctrl+P` | Navigate list |
 | `Tab` / `Shift+Tab` | Switch stack tab |
-| `o` | Toggle opposite range |
+| `Ctrl+O` | Toggle opposite range |
 | `Mouse click` | Select in list or grid |
+| `Click legend` | Toggle action visibility |
 | `/` | Search/filter |
 | `q` or `Ctrl+C` | Quit |
 
@@ -137,7 +139,7 @@ actions:
 
 ### Mixed Hands
 
-When a hand has a mixed strategy (e.g. raise 50%, call 50%), you can assign the same hand to multiple actions with different frequencies. Mixed hands appear with an underline indicator in the grid, and their color is dimmed proportionally to the frequency — so a 50% hand appears at half intensity.
+When a hand has a mixed strategy (e.g. raise 50%, call 50%), you can assign the same hand to multiple actions with different frequencies. The cell border shows a left-to-right color progression proportional to each action's frequency. If the total doesn't reach 100%, the remaining portion is shown in gray representing fold.
 
 The details panel shows the full breakdown when you hover the cursor over a mixed hand.
 
@@ -207,7 +209,7 @@ opposite:
   tab: "40+"                           # Specific tab (optional)
 details: |
   BB defense vs BTN 2.5x open.
-  Press 'o' to see villain's opening range.
+  Press Ctrl+O to see villain's opening range.
 actions:
   - name: call
     title: "Call"
@@ -219,7 +221,7 @@ actions:
     hands: [AA, KK, QQ, JJ, TT, AKs, AKo]
 ```
 
-When you press `o`, the grid switches to show the villain's range with an eye indicator on the tab bar. Press `o` again to return to your range.
+When you press `Ctrl+O`, the grid switches to show the villain's range with an eye indicator on the tab bar. Press `Ctrl+O` again to return to your range.
 
 ### Recommended Color Palette
 
