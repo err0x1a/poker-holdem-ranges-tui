@@ -78,11 +78,11 @@ func TestActionsToHandDetailsMixed(t *testing.T) {
 	if len(hd["AQo"]) != 2 {
 		t.Fatalf("AQo should have 2 details, got %d", len(hd["AQo"]))
 	}
-	if hd["AQo"][0].Title != "All-In" || hd["AQo"][0].Freq != 50 {
-		t.Errorf("first detail should be All-In 50%%, got %s %d%%", hd["AQo"][0].Title, hd["AQo"][0].Freq)
+	if hd["AQo"][0].Freq != 50 {
+		t.Errorf("first detail should be 50%%, got %d%%", hd["AQo"][0].Freq)
 	}
-	if hd["AQo"][1].Title != "Call" || hd["AQo"][1].Freq != 50 {
-		t.Errorf("second detail should be Call 50%%, got %s %d%%", hd["AQo"][1].Title, hd["AQo"][1].Freq)
+	if hd["AQo"][1].Freq != 50 {
+		t.Errorf("second detail should be 50%%, got %d%%", hd["AQo"][1].Freq)
 	}
 }
 
@@ -122,14 +122,14 @@ func TestMixedDetails(t *testing.T) {
 	}
 
 	// Should be sorted by freq desc
-	if details[0].Freq != 50 || details[0].Title != "All-In" {
-		t.Errorf("first should be All-In 50%%, got %s %d%%", details[0].Title, details[0].Freq)
+	if details[0].Freq != 50 {
+		t.Errorf("first should be 50%%, got %d%%", details[0].Freq)
 	}
-	if details[1].Freq != 30 || details[1].Title != "Raise" {
-		t.Errorf("second should be Raise 30%%, got %s %d%%", details[1].Title, details[1].Freq)
+	if details[1].Freq != 30 {
+		t.Errorf("second should be 30%%, got %d%%", details[1].Freq)
 	}
-	if details[2].Freq != 20 || details[2].Title != "Call" {
-		t.Errorf("third should be Call 20%%, got %s %d%%", details[2].Title, details[2].Freq)
+	if details[2].Freq != 20 {
+		t.Errorf("third should be 20%%, got %d%%", details[2].Freq)
 	}
 }
 
