@@ -2,6 +2,7 @@ package ranges
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,6 +24,7 @@ type tabDisplayData struct {
 	handDetails map[string][]ActionDetail
 	legend      []Action
 	details     string
+	sideranges  *Sideranges
 }
 
 // Model represents the state of the ranges view.
@@ -47,6 +49,15 @@ type Model struct {
 
 	// Legend filtering
 	hiddenActions map[string]bool // keyed by action title
+
+	// Sideranges navigation
+	sideranges         *Sideranges
+	siderangeIndex     int
+	siderangeFocused   bool
+	showingSiderange   bool
+	savedSiderangeDisp *tabDisplayData
+	activeSiderangeIdx int // index of loaded siderange, -1 = none
+	filePath           string
 }
 
 // New creates a new model with the generated poker hands.
@@ -55,22 +66,28 @@ func New() Model {
 }
 
 // NewWithRange creates a model from actions and details
-func NewWithRange(actions []Action, details string) Model {
+func NewWithRange(actions []Action, details string, sideranges *Sideranges) Model {
 	return Model{
 		handDetails: ActionsToHandDetails(actions),
 		legend:      buildLegend(actions),
 		details:     details,
+		sideranges:  sideranges,
 	}
 }
 
 // NewWithTabs creates a model with multiple tabs, selecting the first one
-func NewWithTabs(tabs []TabRange) Model {
+func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges) Model {
 	cache := make([]tabDisplayData, len(tabs))
 	for i, tr := range tabs {
+		sr := tr.Sideranges
+		if sr == nil {
+			sr = fileSideranges
+		}
 		cache[i] = tabDisplayData{
 			handDetails: ActionsToHandDetails(tr.Actions),
 			legend:      buildLegend(tr.Actions),
 			details:     tr.Details,
+			sideranges:  sr,
 		}
 	}
 
@@ -78,6 +95,7 @@ func NewWithTabs(tabs []TabRange) Model {
 		handDetails: cache[0].handDetails,
 		legend:      cache[0].legend,
 		details:     cache[0].details,
+		sideranges:  cache[0].sideranges,
 		tabIndex:    0,
 		tabs:        tabs,
 		tabCache:    cache,
@@ -115,6 +133,7 @@ func (m *Model) applyDisplay(d *tabDisplayData) {
 	m.handDetails = d.handDetails
 	m.legend = d.legend
 	m.details = d.details
+	m.sideranges = d.sideranges
 }
 
 // SetTabIndex sets the selected tab index and updates display data
@@ -122,9 +141,30 @@ func (m *Model) SetTabIndex(index int) {
 	if index >= 0 && index < len(m.tabs) {
 		m.showingOpposite = false
 		m.savedDisplay = nil
+		m.showingSiderange = false
+		m.savedSiderangeDisp = nil
+		m.activeSiderangeIdx = -1
 		m.tabIndex = index
 		m.applyDisplay(&m.tabCache[index])
+		m.siderangeIndex = 0
+		m.siderangeFocused = false
 	}
+}
+
+// SetTabByName sets the selected tab by name, returns true if found
+func (m *Model) SetTabByName(name string) bool {
+	for i, tr := range m.tabs {
+		if tr.Tab == name {
+			m.SetTabIndex(i)
+			return true
+		}
+	}
+	return false
+}
+
+// SetFilePath stores the file path for resolving relative siderange paths
+func (m *Model) SetFilePath(path string) {
+	m.filePath = path
 }
 
 // WantsKey returns true if the ranges model wants to handle this key,
@@ -133,8 +173,18 @@ func (m Model) WantsKey(key string) bool {
 	switch key {
 	case "h", "j", "k", "l", "up", "down", "left", "right":
 		return true
+	case "s":
+		return m.hasSideranges()
+	case "enter":
+		return m.siderangeFocused
+	case "esc":
+		return m.siderangeFocused || m.showingSiderange
 	}
 	return false
+}
+
+func (m Model) hasSideranges() bool {
+	return m.sideranges != nil && len(m.sideranges.Items) > 0
 }
 
 // Init initializes the model.
@@ -145,7 +195,39 @@ func (m Model) Init() tea.Cmd {
 // Update handles messages and updates the model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.String() {
+		key := keyMsg.String()
+
+		// Siderange-focused input
+		if m.siderangeFocused {
+			switch key {
+			case "j", "down":
+				if m.siderangeIndex < len(m.sideranges.Items)-1 {
+					m.siderangeIndex++
+				}
+				return m, nil
+			case "k", "up":
+				if m.siderangeIndex > 0 {
+					m.siderangeIndex--
+				}
+				return m, nil
+			case "enter":
+				(&m).loadSiderange()
+				m.siderangeFocused = false
+				return m, nil
+			case "esc":
+				m.siderangeFocused = false
+				return m, nil
+			case "s":
+				if m.showingSiderange {
+					(&m).restoreSiderange()
+				}
+				m.siderangeFocused = false
+				return m, nil
+			}
+			return m, nil
+		}
+
+		switch key {
 		case "h", "left":
 			m.cursorActive = true
 			if m.cursorCol > 0 {
@@ -170,6 +252,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursorCol++
 			}
 			return m, nil
+		case "s":
+			if m.hasSideranges() {
+				m.siderangeFocused = true
+				if !m.showingSiderange {
+					m.siderangeIndex = 0
+				}
+			}
+			return m, nil
+		case "esc":
+			if m.showingSiderange {
+				(&m).restoreSiderange()
+			}
+			return m, nil
 		case "ctrl+o":
 			m.toggleOpposite()
 			return m, nil
@@ -186,6 +281,63 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// loadSiderange loads a siderange file's data into the grid, preserving tabs and sideranges panel
+func (m *Model) loadSiderange() {
+	if !m.hasSideranges() || m.siderangeIndex >= len(m.sideranges.Items) {
+		return
+	}
+	item := m.sideranges.Items[m.siderangeIndex]
+	file := item.File
+	if m.filePath != "" && !filepath.IsAbs(file) {
+		file = filepath.Clean(filepath.Join(filepath.Dir(m.filePath), file))
+	}
+
+	rf, err := LoadRangeFile(file)
+	if err != nil {
+		return
+	}
+
+	var actions []Action
+	var details string
+	if rf.HasTabs() {
+		tab := findTab(rf.Tabs, item.Tab)
+		if tab == nil {
+			return
+		}
+		actions = tab.Actions
+		details = tab.Details
+	} else {
+		actions = rf.Actions
+		details = rf.Details
+	}
+
+	// Save current display only if not already showing a siderange
+	if !m.showingSiderange {
+		m.savedSiderangeDisp = &tabDisplayData{
+			handDetails: m.handDetails,
+			legend:      m.legend,
+			details:     m.details,
+			sideranges:  m.sideranges,
+		}
+	}
+
+	m.handDetails = ActionsToHandDetails(actions)
+	m.legend = buildLegend(actions)
+	m.details = details
+	m.showingSiderange = true
+	m.activeSiderangeIdx = m.siderangeIndex
+}
+
+// restoreSiderange restores the display from before siderange was loaded
+func (m *Model) restoreSiderange() {
+	if m.savedSiderangeDisp != nil {
+		m.applyDisplay(m.savedSiderangeDisp)
+		m.savedSiderangeDisp = nil
+	}
+	m.showingSiderange = false
+	m.activeSiderangeIdx = -1
 }
 
 // currentOpposite returns the opposite data for the current tab, or nil
@@ -218,6 +370,7 @@ func (m *Model) toggleOpposite() {
 			handDetails: m.handDetails,
 			legend:      m.legend,
 			details:     m.details,
+			sideranges:  m.sideranges,
 		}
 		m.applyDisplay(opp)
 		m.showingOpposite = true
@@ -229,6 +382,14 @@ func (m *Model) HandleClick(x, y int) {
 	gridOffsetY := 0
 	if len(m.tabs) > 0 || m.currentOpposite() != nil {
 		gridOffsetY = 1
+	}
+
+	// Check for siderange clicks in the right panel area
+	gridW := 13 * cellW
+	if m.hasSideranges() && x >= gridW {
+		if m.handleSiderangeClick(y) {
+			return
+		}
 	}
 
 	// Check if click is on the legend row
@@ -247,6 +408,43 @@ func (m *Model) HandleClick(x, y int) {
 		m.cursorCol = col
 		m.cursorActive = true
 	}
+}
+
+// handleSiderangeClick checks if a click hit a siderange item in the right panel.
+// Returns true if a siderange was clicked.
+func (m *Model) handleSiderangeClick(y int) bool {
+	// Panel Y offset: border(1) + padding(1) = 2, plus marginTop(1) if tabs
+	panelContentY := 2
+	if len(m.tabs) > 0 {
+		panelContentY = 3
+	}
+
+	// Count lines in the content before sideranges (details or hand details)
+	var contentLines int
+	if m.cursorActive {
+		hand := strings.TrimSpace(allCards[m.cursorRow*13+m.cursorCol])
+		if details, ok := m.handDetails[hand]; ok {
+			contentLines = strings.Count(m.renderHandDetails(hand, details), "\n")
+		}
+	}
+	if contentLines == 0 {
+		contentLines = strings.Count(m.details, "\n")
+	}
+
+	// Siderange header: \n + separator + \n\n + title + \n\n = 5 lines
+	const siderangeHeaderLines = 5
+	firstItemLine := contentLines + siderangeHeaderLines
+	clickedLine := y - panelContentY
+	itemIdx := clickedLine - firstItemLine
+
+	nItems := len(m.sideranges.Items)
+	if itemIdx >= 0 && itemIdx < nItems {
+		m.siderangeIndex = itemIdx
+		m.loadSiderange()
+		m.siderangeFocused = false
+		return true
+	}
+	return false
 }
 
 // handleLegendClick toggles action visibility based on click position in the legend.
@@ -411,14 +609,57 @@ func (m Model) View() string {
 
 // buildDetailsPanel returns the content for the right-side details panel.
 // Shows hand action breakdown when cursor is on a hand, otherwise strategy details.
+// Appends sideranges list below the main content when available.
 func (m Model) buildDetailsPanel() string {
+	var content string
 	if m.cursorActive {
 		hand := strings.TrimSpace(allCards[m.cursorRow*13+m.cursorCol])
 		if details, ok := m.handDetails[hand]; ok {
-			return m.renderHandDetails(hand, details)
+			content = m.renderHandDetails(hand, details)
 		}
 	}
-	return m.details
+	if content == "" {
+		content = m.details
+	}
+
+	if m.hasSideranges() {
+		content += m.renderSideranges()
+	}
+
+	return content
+}
+
+// renderSideranges formats the sideranges list for the details panel
+func (m Model) renderSideranges() string {
+	var b strings.Builder
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#AAAAAA"))
+	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+	focusedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4488FF")).Bold(true)
+
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("─────────────────"))
+	b.WriteString("\n\n")
+	b.WriteString(titleStyle.Render(m.sideranges.Title))
+	b.WriteString("\n\n")
+
+	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+
+	for i, item := range m.sideranges.Items {
+		isActive := m.showingSiderange && i == m.activeSiderangeIdx
+		isFocused := m.siderangeFocused && i == m.siderangeIndex
+		switch {
+		case isActive:
+			b.WriteString(activeStyle.Render("  ▸ " + item.Label))
+		case isFocused:
+			b.WriteString(focusedStyle.Render("  ▸ " + item.Label))
+		default:
+			b.WriteString(normalStyle.Render("  ▸ " + item.Label))
+		}
+		b.WriteString("\n")
+	}
+
+	return b.String()
 }
 
 // renderHandDetails formats a hand's action breakdown for the details panel
@@ -550,11 +791,4 @@ func renderSplitBorderCell(card string, details []ActionDetail, totalFreq int, s
 	return top + "\n" + mid + "\n" + bot
 }
 
-// abs returns the absolute value of an integer.
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
 

@@ -128,6 +128,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+
 	}
 
 	listCmd = m.listModel.Update(msg)
@@ -143,7 +144,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedFilePath = filePath
 		if rf, err := ranges.LoadRangeFile(filePath); err == nil {
 			if rf.HasTabs() {
-				m.rangesModel = ranges.NewWithTabs(rf.Tabs)
+				m.rangesModel = ranges.NewWithTabs(rf.Tabs, rf.Sideranges)
 				if savedIndex, ok := m.tabIndexByFile[filePath]; ok {
 					m.rangesModel.SetTabIndex(savedIndex)
 				}
@@ -153,7 +154,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.rangesModel.SetOppositeData(oppData, oppLabel)
 				}
 			} else {
-				m.rangesModel = ranges.NewWithRange(rf.Actions, rf.Details)
+				m.rangesModel = ranges.NewWithRange(rf.Actions, rf.Details, rf.Sideranges)
 				// Load single opposite
 				if rf.Opposite != nil {
 					if opp := ranges.LoadOppositeData(filePath, *rf.Opposite); opp != nil {
@@ -161,6 +162,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			m.rangesModel.SetFilePath(filePath)
 			m.rangesModel.SetHiddenActions(savedHidden)
 		}
 	}

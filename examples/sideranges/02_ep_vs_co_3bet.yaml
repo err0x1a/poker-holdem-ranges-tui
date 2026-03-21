@@ -1,0 +1,34 @@
+title: "EP vs CO 3-bet (25BB)"
+description: "EP response to CO 3-bet at 25BB"
+details: |
+  EP vs CO 3-bet at 25BB
+  4-bet value + call range
+actions:
+  - name: fourbet
+    title: "4-bet"
+    color: "#20bf55"
+    hands:
+      - AA
+      - KK
+      - {hand: QQ, freq: 70}
+      - AKs
+      - {hand: AKo, freq: 60}
+  - name: call
+    title: "Call"
+    color: "#FFFFFF"
+    hands:
+      - {hand: QQ, freq: 30}
+      - JJ
+      - TT
+      - AQs
+      - AJs
+      - KQs
+      - {hand: AKo, freq: 40}
+      - AQo
+  - name: bluff
+    title: "4-bet Bluff"
+    color: "#FFD166"
+    hands:
+      - A5s
+      - A4s
+      - {hand: A3s, freq: 50}

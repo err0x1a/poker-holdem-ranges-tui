@@ -3,6 +3,11 @@ description: "Open raise range for EP - multi tab"
 opposite:
   file: "test_opposite.yaml"
   tab: "40+"
+sideranges:
+  title: "vs 3-bet"
+  items:
+    - label: "vs BB defense"
+      file: "test_opposite.yaml"
 tab_ranges:
   - tab: "40+"
     opposite:

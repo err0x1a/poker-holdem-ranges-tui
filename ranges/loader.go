@@ -57,6 +57,19 @@ type Action struct {
 	RemoveHands []string    `yaml:"remove_hands"`
 }
 
+// SiderangeItem represents a single siderange reference
+type SiderangeItem struct {
+	Label string `yaml:"label"`
+	File  string `yaml:"file"`
+	Tab   string `yaml:"tab"`
+}
+
+// Sideranges holds a titled group of siderange references
+type Sideranges struct {
+	Title string          `yaml:"title"`
+	Items []SiderangeItem `yaml:"items"`
+}
+
 // OppositeRef points to an opposite range file (and optionally a specific tab)
 type OppositeRef struct {
 	File string `yaml:"file"`
@@ -74,11 +87,12 @@ func (r OppositeRef) Label() string {
 
 // TabRange represents a single tab with its own actions and details
 type TabRange struct {
-	Tab      string       `yaml:"tab"`
-	Base     string       `yaml:"base"`
-	Details  string       `yaml:"details"`
-	Actions  []Action     `yaml:"actions"`
-	Opposite *OppositeRef `yaml:"opposite"`
+	Tab        string       `yaml:"tab"`
+	Base       string       `yaml:"base"`
+	Details    string       `yaml:"details"`
+	Actions    []Action     `yaml:"actions"`
+	Opposite   *OppositeRef `yaml:"opposite"`
+	Sideranges *Sideranges  `yaml:"sideranges"`
 }
 
 // RangeFile represents the full YAML structure
@@ -89,6 +103,7 @@ type RangeFile struct {
 	Actions     []Action     `yaml:"actions"`
 	Tabs        []TabRange   `yaml:"tab_ranges"`
 	Opposite    *OppositeRef `yaml:"opposite"`
+	Sideranges  *Sideranges  `yaml:"sideranges"`
 }
 
 // HasTabs returns true if the file uses the multi-tab format

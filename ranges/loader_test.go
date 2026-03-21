@@ -1,7 +1,7 @@
 package ranges
 
 import (
-	"fmt"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -318,9 +318,8 @@ tab_ranges:
 		}
 	}
 
-	fmt.Println("\n=== 17BB resolved actions ===")
 	for _, a := range tab17.Actions {
-		fmt.Printf("  %s: %v\n", a.Name, handNames(a.Hands))
+		t.Logf("  %s: %v", a.Name, handNames(a.Hands))
 	}
 }
 
@@ -368,9 +367,9 @@ tab_ranges:
 	resolveTabs(rf.Tabs)
 
 	for _, tr := range rf.Tabs {
-		fmt.Printf("\n%s:\n", tr.Tab)
+		t.Logf("%s:", tr.Tab)
 		for _, a := range tr.Actions {
-			fmt.Printf("  %s: %v\n", a.Name, handNames(a.Hands))
+			t.Logf("  %s: %v", a.Name, handNames(a.Hands))
 		}
 	}
 
@@ -396,6 +395,204 @@ tab_ranges:
 		if a.Name == "raise_high_freq" && containsHand(a.Hands, "T4s") {
 			t.Errorf("17BB raise_high_freq should NOT contain T4s, got: %v", handNames(a.Hands))
 		}
+	}
+}
+
+func TestSiderangesParsing(t *testing.T) {
+	data := `
+title: "EP First In"
+sideranges:
+  title: "vs 3-bet"
+  items:
+    - label: "vs UTG1"
+      file: "responses/vs_utg1.yaml"
+      tab: "20BB"
+    - label: "vs LJ"
+      file: "responses/vs_lj.yaml"
+actions:
+  - name: raise
+    title: "Raise"
+    color: "#20bf55"
+    hands: [AA]
+`
+	var rf RangeFile
+	if err := yaml.Unmarshal([]byte(data), &rf); err != nil {
+		t.Fatal(err)
+	}
+
+	if rf.Sideranges == nil {
+		t.Fatal("expected sideranges to be parsed")
+	}
+	if rf.Sideranges.Title != "vs 3-bet" {
+		t.Errorf("expected title 'vs 3-bet', got %q", rf.Sideranges.Title)
+	}
+	if len(rf.Sideranges.Items) != 2 {
+		t.Fatalf("expected 2 siderange items, got %d", len(rf.Sideranges.Items))
+	}
+	if rf.Sideranges.Items[0].Label != "vs UTG1" {
+		t.Errorf("expected label 'vs UTG1', got %q", rf.Sideranges.Items[0].Label)
+	}
+	if rf.Sideranges.Items[0].File != "responses/vs_utg1.yaml" {
+		t.Errorf("expected file 'responses/vs_utg1.yaml', got %q", rf.Sideranges.Items[0].File)
+	}
+	if rf.Sideranges.Items[0].Tab != "20BB" {
+		t.Errorf("expected tab '20BB', got %q", rf.Sideranges.Items[0].Tab)
+	}
+	if rf.Sideranges.Items[1].Tab != "" {
+		t.Errorf("expected empty tab, got %q", rf.Sideranges.Items[1].Tab)
+	}
+}
+
+func TestSiderangesPerTab(t *testing.T) {
+	data := `
+title: "EP First In"
+sideranges:
+  title: "file-level"
+  items:
+    - label: "fallback"
+      file: "fallback.yaml"
+tab_ranges:
+  - tab: "40+"
+    sideranges:
+      title: "vs 3-bet 40+"
+      items:
+        - label: "vs UTG1 40+"
+          file: "responses/vs_utg1_40.yaml"
+    actions:
+      - name: raise
+        title: "Raise"
+        color: "#20bf55"
+        hands: [AA]
+  - tab: "20BB"
+    actions:
+      - name: raise
+        title: "Raise"
+        color: "#20bf55"
+        hands: [AA]
+`
+	var rf RangeFile
+	if err := yaml.Unmarshal([]byte(data), &rf); err != nil {
+		t.Fatal(err)
+	}
+
+	// Tab with its own sideranges should use them
+	if rf.Tabs[0].Sideranges == nil {
+		t.Fatal("tab 40+ should have sideranges")
+	}
+	if rf.Tabs[0].Sideranges.Title != "vs 3-bet 40+" {
+		t.Errorf("expected 'vs 3-bet 40+', got %q", rf.Tabs[0].Sideranges.Title)
+	}
+
+	// Tab without sideranges should be nil (fallback handled by NewWithTabs)
+	if rf.Tabs[1].Sideranges != nil {
+		t.Error("tab 20BB should not have its own sideranges")
+	}
+
+	// File-level sideranges should exist
+	if rf.Sideranges == nil {
+		t.Fatal("file-level sideranges should exist")
+	}
+	if rf.Sideranges.Title != "file-level" {
+		t.Errorf("expected 'file-level', got %q", rf.Sideranges.Title)
+	}
+}
+
+func TestSiderangesFallbackInModel(t *testing.T) {
+	fileSideranges := &Sideranges{
+		Title: "file-level",
+		Items: []SiderangeItem{{Label: "fallback", File: "f.yaml"}},
+	}
+	tabSideranges := &Sideranges{
+		Title: "tab-level",
+		Items: []SiderangeItem{{Label: "tab item", File: "t.yaml"}},
+	}
+
+	tabs := []TabRange{
+		{
+			Tab:        "40+",
+			Sideranges: tabSideranges,
+			Actions:    []Action{{Name: "r", Title: "R", Color: "#fff", Hands: []HandEntry{{Hand: "AA"}}}},
+		},
+		{
+			Tab:     "20BB",
+			Actions: []Action{{Name: "r", Title: "R", Color: "#fff", Hands: []HandEntry{{Hand: "AA"}}}},
+		},
+	}
+
+	model := NewWithTabs(tabs, fileSideranges)
+
+	// First tab should use its own sideranges
+	if model.sideranges == nil || model.sideranges.Title != "tab-level" {
+		t.Errorf("tab 40+ should use tab-level sideranges, got %v", model.sideranges)
+	}
+
+	// Switch to second tab - should fallback to file-level
+	model.SetTabIndex(1)
+	if model.sideranges == nil || model.sideranges.Title != "file-level" {
+		t.Errorf("tab 20BB should fallback to file-level sideranges, got %v", model.sideranges)
+	}
+}
+
+func TestSiderangesOnlyOnMiddleTab(t *testing.T) {
+	// Simulates: file with many tabs, sideranges only on "20BB" tab, no file-level sideranges
+	tabs := []TabRange{
+		{Tab: "100BB", Actions: []Action{{Name: "r", Title: "R", Color: "#fff", Hands: []HandEntry{{Hand: "AA"}}}}},
+		{Tab: "80BB", Actions: []Action{{Name: "r", Title: "R", Color: "#fff", Hands: []HandEntry{{Hand: "AA"}}}}},
+		{
+			Tab: "20BB",
+			Sideranges: &Sideranges{
+				Title: "vs 3-bet",
+				Items: []SiderangeItem{
+					{Label: "vs UTG1", File: "vs3bet/01.yaml"},
+					{Label: "vs LJ", File: "vs3bet/02.yaml"},
+				},
+			},
+			Actions: []Action{{Name: "r", Title: "R", Color: "#fff", Hands: []HandEntry{{Hand: "AA"}}}},
+		},
+		{Tab: "17BB", Actions: []Action{{Name: "r", Title: "R", Color: "#fff", Hands: []HandEntry{{Hand: "AA"}}}}},
+	}
+
+	model := NewWithTabs(tabs, nil) // no file-level sideranges
+
+	// Tab 0 (100BB) - no sideranges
+	if model.hasSideranges() {
+		t.Error("100BB should not have sideranges")
+	}
+
+	// Switch to tab 2 (20BB) - should have sideranges
+	model.SetTabIndex(2)
+	if !model.hasSideranges() {
+		t.Fatal("20BB should have sideranges")
+	}
+	if model.sideranges.Title != "vs 3-bet" {
+		t.Errorf("expected title 'vs 3-bet', got %q", model.sideranges.Title)
+	}
+	if len(model.sideranges.Items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(model.sideranges.Items))
+	}
+
+	// Switch to tab 3 (17BB) - no sideranges
+	model.SetTabIndex(3)
+	if model.hasSideranges() {
+		t.Error("17BB should not have sideranges")
+	}
+
+	// Switch back to tab 2 (20BB) - should still have sideranges
+	model.SetTabIndex(2)
+	if !model.hasSideranges() {
+		t.Fatal("20BB should still have sideranges after switching back")
+	}
+
+	// Verify buildDetailsPanel includes sideranges
+	panel := model.buildDetailsPanel()
+	if panel == "" {
+		t.Error("panel should not be empty when sideranges exist")
+	}
+	if !strings.Contains(panel, "vs 3-bet") {
+		t.Errorf("panel should contain sideranges title, got: %s", panel)
+	}
+	if !strings.Contains(panel, "vs UTG1") {
+		t.Errorf("panel should contain siderange items, got: %s", panel)
 	}
 }
 

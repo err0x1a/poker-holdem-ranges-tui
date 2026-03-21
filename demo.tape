@@ -13,16 +13,8 @@ Enter
 Sleep 1s
 Show
 
-Type "main examples/"
+Type "main examples/sideranges/"
 Enter
-Sleep 3s
-
-# Navigate list to tab range file
-Ctrl+N
-Sleep 2s
-Ctrl+N
-Sleep 2s
-Ctrl+N
 Sleep 3s
 
 # Grid cursor navigation
@@ -35,56 +27,50 @@ Sleep 1s
 Type "j"
 Sleep 3s
 
-# Switch tab to show mixed hands with border progression
+# Switch to 25BB tab (has sideranges)
 Tab
 Sleep 3s
 
-# Navigate to mixed hand
+# Enter sideranges with 's'
+Type "s"
+Sleep 2s
+
+# Navigate to "vs BTN"
+Type "j"
+Sleep 2s
+
+# Load siderange with Enter
+Enter
+Sleep 3s
+
+# Navigate grid in loaded siderange
+Type "l"
+Sleep 1s
+Type "j"
+Sleep 1s
+Type "j"
+Sleep 3s
+
+# Go back to sideranges and switch to "vs CO"
+Type "s"
+Sleep 1s
 Type "k"
 Sleep 1s
-Type "l"
+Enter
 Sleep 3s
 
-# Go to CO vs BTN 3-bet example (lots of mixed hands)
-Ctrl+N
-Sleep 2s
-Ctrl+N
-Sleep 3s
-
-# Navigate to QQ (mixed 4-bet/call)
-Type "h"
-Sleep 500ms
-Type "h"
-Sleep 500ms
-Type "h"
-Sleep 500ms
+# Navigate to mixed hand QQ
 Type "k"
 Sleep 500ms
 Type "k"
+Sleep 500ms
+Type "h"
+Sleep 500ms
+Type "h"
 Sleep 3s
 
-# Navigate to AKo (mixed 4-bet/call)
-Type "l"
-Sleep 500ms
-Type "l"
-Sleep 500ms
-Type "l"
+# Esc to restore original range
+Escape
 Sleep 3s
-
-# Navigate to ATs (mixed call/bluff)
-Type "j"
-Sleep 500ms
-Type "j"
-Sleep 500ms
-Type "j"
-Sleep 3s
-
-# Toggle opposite range
-Ctrl+O
-Sleep 4s
-
-# Back to original
-Ctrl+O
-Sleep 2s
 
 Type "q"

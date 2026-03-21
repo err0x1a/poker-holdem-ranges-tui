@@ -71,6 +71,7 @@ func New(files []string, title string, titleColor string) *Model {
 	l.KeyMap.CursorDown = key.NewBinding(key.WithKeys("ctrl+n"))
 	l.KeyMap.PrevPage = key.NewBinding(key.WithKeys("pgup"))
 	l.KeyMap.NextPage = key.NewBinding(key.WithKeys("pgdown"))
+	l.KeyMap.Quit = key.NewBinding(key.WithKeys()) // disable esc quit
 
 	model := Model{
 		list:      l,
@@ -128,4 +129,15 @@ func (m *Model) SelectedItem() (title, desc, filePath string) {
 		return i.title, i.desc, i.filePath
 	}
 	return "", "", ""
+}
+
+// SelectByPath selects the item matching the given file path, returns true if found
+func (m *Model) SelectByPath(filePath string) bool {
+	for i, li := range m.list.Items() {
+		if it, ok := li.(item); ok && it.filePath == filePath {
+			m.list.Select(i)
+			return true
+		}
+	}
+	return false
 }

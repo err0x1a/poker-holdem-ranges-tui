@@ -1,0 +1,39 @@
+title: "EP vs BTN 3-bet (25BB)"
+description: "EP response to BTN 3-bet at 25BB"
+details: |
+  EP vs BTN 3-bet at 25BB
+  Wider defense vs BTN
+actions:
+  - name: fourbet
+    title: "4-bet"
+    color: "#20bf55"
+    hands:
+      - AA
+      - KK
+      - QQ
+      - AKs
+      - AKo
+  - name: call
+    title: "Call"
+    color: "#FFFFFF"
+    hands:
+      - JJ
+      - TT
+      - 99
+      - AQs
+      - AJs
+      - ATs
+      - KQs
+      - KJs
+      - QJs
+      - JTs
+      - AQo
+  - name: bluff
+    title: "4-bet Bluff"
+    color: "#FFD166"
+    hands:
+      - A5s
+      - A4s
+      - A3s
+      - {hand: A2s, freq: 50}
+      - {hand: K9s, freq: 30}

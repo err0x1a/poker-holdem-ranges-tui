@@ -13,6 +13,7 @@ A terminal-based viewer for your custom Texas Hold'em poker ranges. Create your 
 - **Details panel** — Strategic notes per range, shown alongside the grid
 - **Grid cursor** — Navigate individual hands with `h/j/k/l`, arrows, or mouse click. The selected hand shows its action breakdown in a details panel on the right
 - **Multi-tab ranges** — Define multiple stack-depth variations in a single file (e.g. 40BB+, 25-40BB, 12-25BB). Tabs inherit from a base and can add/remove hands. Switch with `Tab`/`Shift+Tab`
+- **Sideranges** — Link related ranges (e.g. 3-bet responses from each position) to a tab. A titled list of references appears in the details panel. Press `s` to navigate, `Enter` to load inline (tabs stay), `Esc` to restore. Also clickable
 - **Opposite range** — Link your range to the opponent's range file. Press `Ctrl+O` to toggle and see what the villain is doing — useful for studying how your defense aligns against their opens
 - **Legend filtering** — Click on a legend item to hide/show that action across all ranges. Useful for isolating specific actions to study
 - **Mixed hands** — Hands with partial frequency (e.g. 50% raise, 50% call). Cell borders show a left-to-right color progression proportional to each action's frequency, with the remaining percentage shown in gray (fold)
@@ -81,6 +82,8 @@ Download the [examples](examples/) folder to test:
 | `h/j/k/l` or `←↑↓→` | Navigate grid |
 | `Ctrl+N` / `Ctrl+P` | Navigate list |
 | `Tab` / `Shift+Tab` | Switch stack tab |
+| `s` | Enter/exit sideranges |
+| `Esc` | Exit siderange view |
 | `Ctrl+O` | Toggle opposite range |
 | `Mouse click` | Select in list or grid |
 | `Click legend` | Toggle action visibility |
@@ -194,6 +197,33 @@ tab_ranges:
         color: "#FF8A80"
         hands: [TT]
 ```
+
+### Sideranges
+
+Link related ranges to a tab — for example, your 3-bet responses against each position. The `sideranges` field adds a titled list of clickable references in the details panel.
+
+Sideranges can be defined at file level (applies to all tabs) or per tab (overrides file level). Files are referenced by relative path.
+
+```yaml
+title: "EP Open (Multi-Stack)"
+tab_ranges:
+  - tab: "25BB"
+    sideranges:
+      title: "vs 3-bet"
+      items:
+        - label: "vs CO"
+          file: "responses/ep_vs_co_3bet.yaml"
+        - label: "vs BTN"
+          file: "responses/ep_vs_btn_3bet.yaml"
+          tab: "25BB"    # Optional: specific tab in the target file
+    actions:
+      - name: raise
+        title: "Raise"
+        color: "#20bf55"
+        hands: [AA, KK, QQ, JJ, TT, AKs, AQs, AKo]
+```
+
+Press `s` to focus the sideranges list, `j/k` to navigate, `Enter` to load the range inline (tabs and panel stay). Press `Esc` to restore the original range, or click a siderange item directly.
 
 ### Opposite Range
 
