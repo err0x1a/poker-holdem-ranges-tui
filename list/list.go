@@ -118,6 +118,11 @@ func (m *Model) HandleClick(y int) {
 	}
 }
 
+// IsFiltering returns true when the list filter input is active
+func (m *Model) IsFiltering() bool {
+	return m.list.FilterState() == list.Filtering
+}
+
 // ViewWidth returns the total rendered width of the list view
 func (m *Model) ViewWidth() int {
 	return m.list.Width() + 2

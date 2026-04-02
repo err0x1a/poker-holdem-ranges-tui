@@ -105,12 +105,13 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
-		if key == "ctrl+c" || key == "q" {
+		if key == "ctrl+c" {
 			return m, tea.Quit
 		}
 		// Route keys that the ranges model wants (h/j/k/l cursor, enter/space, esc)
 		// directly to it, bypassing the list model to avoid conflicts.
-		if m.rangesModel.WantsKey(key) {
+		// Skip when the list filter is active so typed characters reach the filter input.
+		if !m.listModel.IsFiltering() && m.rangesModel.WantsKey(key) {
 			newModel, cmd := m.rangesModel.Update(msg)
 			m.rangesModel = newModel.(ranges.Model)
 			return m, cmd
@@ -165,6 +166,11 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rangesModel.SetFilePath(filePath)
 			m.rangesModel.SetHiddenActions(savedHidden)
 		}
+	}
+
+	// Don't forward key events to ranges model while the list filter is active
+	if _, isKey := msg.(tea.KeyMsg); isKey && m.listModel.IsFiltering() {
+		return m, listCmd
 	}
 
 	var newRangesModel tea.Model
