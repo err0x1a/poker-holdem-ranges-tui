@@ -128,6 +128,14 @@ func (m Model) TabIndex() int {
 	return m.tabIndex
 }
 
+// TabName returns the name of the currently selected tab
+func (m Model) TabName() string {
+	if m.tabIndex >= 0 && m.tabIndex < len(m.tabs) {
+		return m.tabs[m.tabIndex].Tab
+	}
+	return ""
+}
+
 // applyDisplay updates the model's display fields from a tabDisplayData
 func (m *Model) applyDisplay(d *tabDisplayData) {
 	m.handDetails = d.handDetails

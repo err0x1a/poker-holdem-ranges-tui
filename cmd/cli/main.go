@@ -79,15 +79,14 @@ type MainModel struct {
 	listModel        *list.Model
 	rangesModel      ranges.Model
 	selectedFilePath string
-	tabIndexByFile   map[string]int
+	lastTabName string
 }
 
 // NewMainModel creates a new main model
 func NewMainModel(files []string, title string, titleColor string) MainModel {
 	return MainModel{
-		listModel:      list.New(files, title, titleColor),
-		rangesModel:    ranges.New(),
-		tabIndexByFile: make(map[string]int),
+		listModel:   list.New(files, title, titleColor),
+		rangesModel: ranges.New(),
 	}
 }
 
@@ -136,9 +135,9 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	_, _, filePath := m.listModel.SelectedItem()
 	if filePath != "" && filePath != m.selectedFilePath {
-		// Save current tab index before switching
+		// Save current tab name before switching
 		if m.selectedFilePath != "" && m.rangesModel.HasTabSelector() {
-			m.tabIndexByFile[m.selectedFilePath] = m.rangesModel.TabIndex()
+			m.lastTabName = m.rangesModel.TabName()
 		}
 		// Preserve hidden actions across range switches
 		savedHidden := m.rangesModel.HiddenActions()
@@ -146,8 +145,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if rf, err := ranges.LoadRangeFile(filePath); err == nil {
 			if rf.HasTabs() {
 				m.rangesModel = ranges.NewWithTabs(rf.Tabs, rf.Sideranges)
-				if savedIndex, ok := m.tabIndexByFile[filePath]; ok {
-					m.rangesModel.SetTabIndex(savedIndex)
+				if m.lastTabName != "" {
+					m.rangesModel.SetTabByName(m.lastTabName)
 				}
 				// Load opposite data per tab
 				oppData, oppLabel := loadTabOpposites(filePath, rf)
