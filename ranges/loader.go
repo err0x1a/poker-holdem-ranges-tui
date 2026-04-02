@@ -102,6 +102,7 @@ type RangeFile struct {
 	Details     string       `yaml:"details"`
 	Actions     []Action     `yaml:"actions"`
 	Tabs        []TabRange   `yaml:"tab_ranges"`
+	TabStyle    string       `yaml:"tab_style"`
 	Opposite    *OppositeRef `yaml:"opposite"`
 	Sideranges  *Sideranges  `yaml:"sideranges"`
 }

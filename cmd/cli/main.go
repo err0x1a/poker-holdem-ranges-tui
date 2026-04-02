@@ -144,7 +144,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedFilePath = filePath
 		if rf, err := ranges.LoadRangeFile(filePath); err == nil {
 			if rf.HasTabs() {
-				m.rangesModel = ranges.NewWithTabs(rf.Tabs, rf.Sideranges)
+				m.rangesModel = ranges.NewWithTabs(rf.Tabs, rf.Sideranges, rf.TabStyle)
 				if m.lastTabName != "" {
 					m.rangesModel.SetTabByName(m.lastTabName)
 				}
@@ -185,6 +185,7 @@ func (m MainModel) View() string {
 	if m.rangesModel.HasTabSelector() {
 		listView = lipgloss.NewStyle().MarginTop(1).Render(listView)
 	}
+
 	return lipgloss.JoinHorizontal(lipgloss.Top, listView, spacer, m.rangesModel.View())
 }
 

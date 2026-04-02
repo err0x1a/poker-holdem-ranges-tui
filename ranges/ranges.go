@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const tabStyleSingle = "single"
+
 // Grid cell dimensions (border + padding + content).
 // Used by both View() and HandleClick() to keep rendering and click detection in sync.
 const (
@@ -58,6 +60,9 @@ type Model struct {
 	savedSiderangeDisp *tabDisplayData
 	activeSiderangeIdx int // index of loaded siderange, -1 = none
 	filePath           string
+
+	// Tab display style: "" = horizontal bar, "single" = one tab at a time with arrows
+	tabStyle string
 }
 
 // New creates a new model with the generated poker hands.
@@ -76,7 +81,7 @@ func NewWithRange(actions []Action, details string, sideranges *Sideranges) Mode
 }
 
 // NewWithTabs creates a model with multiple tabs, selecting the first one
-func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges) Model {
+func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges, tabStyle string) Model {
 	cache := make([]tabDisplayData, len(tabs))
 	for i, tr := range tabs {
 		sr := tr.Sideranges
@@ -99,6 +104,7 @@ func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges) Model {
 		tabIndex:    0,
 		tabs:        tabs,
 		tabCache:    cache,
+		tabStyle:    tabStyle,
 	}
 }
 
@@ -121,6 +127,11 @@ func (m *Model) SetHiddenActions(h map[string]bool) {
 // HasTabSelector returns true if the model has a tab selector bar
 func (m Model) HasTabSelector() bool {
 	return len(m.tabs) > 0
+}
+
+// IsSingleTabStyle returns true if tabs render one at a time with arrows
+func (m Model) IsSingleTabStyle() bool {
+	return m.tabStyle == tabStyleSingle && len(m.tabs) > 0
 }
 
 // TabIndex returns the currently selected tab index
@@ -546,30 +557,64 @@ func (m Model) View() string {
 		}
 	}
 
-	// Add tab selector above grid if present
+	// Add tab selector above grid
 	if len(m.tabs) > 0 {
-		selectedStyle := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Background(lipgloss.Color("#4488FF")).
-			Padding(0, 1)
-		dimStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			Padding(0, 1)
+		var tabLine string
+		if m.IsSingleTabStyle() {
+			// Single mode: one tab at a time with arrows
+			arrowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4488FF")).Bold(true)
+			highlightStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFD166")).
+				Background(lipgloss.Color("#333333")).
+				Bold(true)
+			valueStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(lipgloss.Color("#333333")).
+				PaddingRight(1)
+			counterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#555555"))
 
-		var tabItems []string
-		for i, tr := range m.tabs {
-			if i == m.tabIndex {
-				tabItems = append(tabItems, selectedStyle.Render(tr.Tab))
+			value := m.tabs[m.tabIndex].Tab
+			counter := fmt.Sprintf("(%d/%d)", m.tabIndex+1, len(m.tabs))
+
+			// Highlight text before the first "|" in yellow/bold
+			var renderedValue string
+			if before, after, found := strings.Cut(value, "|"); found {
+				renderedValue = highlightStyle.Render(" "+before) + valueStyle.Render("|"+after)
 			} else {
-				tabItems = append(tabItems, dimStyle.Render(tr.Tab))
+				renderedValue = highlightStyle.Render(" " + value + " ")
 			}
+
+			tabLine = lipgloss.JoinHorizontal(lipgloss.Center,
+				arrowStyle.Render("◀"),
+				renderedValue,
+				arrowStyle.Render(" ▶"),
+				counterStyle.Render(" "+counter),
+			)
+		} else {
+			// Tab bar mode: horizontal tabs
+			selectedStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(lipgloss.Color("#4488FF")).
+				Padding(0, 1)
+			dimStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#666666")).
+				Padding(0, 1)
+
+			var tabItems []string
+			for i, tr := range m.tabs {
+				if i == m.tabIndex {
+					tabItems = append(tabItems, selectedStyle.Render(tr.Tab))
+				} else {
+					tabItems = append(tabItems, dimStyle.Render(tr.Tab))
+				}
+			}
+			tabLine = lipgloss.JoinHorizontal(lipgloss.Center, tabItems...)
 		}
-		tabSelector := lipgloss.JoinHorizontal(lipgloss.Center, tabItems...)
 		if eyeIndicator != "" {
-			tabSelector = lipgloss.JoinHorizontal(lipgloss.Center, tabSelector, eyeIndicator)
+			tabLine = lipgloss.JoinHorizontal(lipgloss.Center, tabLine, eyeIndicator)
 		}
-		grid = lipgloss.JoinVertical(lipgloss.Left, tabSelector, grid)
+		grid = lipgloss.JoinVertical(lipgloss.Left, tabLine, grid)
 	} else if eyeIndicator != "" {
 		grid = lipgloss.JoinVertical(lipgloss.Right, eyeIndicator, grid)
 	}
