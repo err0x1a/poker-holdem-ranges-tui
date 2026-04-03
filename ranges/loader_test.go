@@ -519,7 +519,7 @@ func TestSiderangesFallbackInModel(t *testing.T) {
 		},
 	}
 
-	model := NewWithTabs(tabs, fileSideranges, "")
+	model := NewWithTabs(tabs, fileSideranges, "", "")
 
 	// First tab should use its own sideranges
 	if model.sideranges == nil || model.sideranges.Title != "tab-level" {
@@ -552,7 +552,7 @@ func TestSiderangesOnlyOnMiddleTab(t *testing.T) {
 		{Tab: "17BB", Actions: []Action{{Name: "r", Title: "R", Color: "#fff", Hands: []HandEntry{{Hand: "AA"}}}}},
 	}
 
-	model := NewWithTabs(tabs, nil, "") // no file-level sideranges
+	model := NewWithTabs(tabs, nil, "", "") // no file-level sideranges
 
 	// Tab 0 (100BB) - no sideranges
 	if model.hasSideranges() {
@@ -593,6 +593,76 @@ func TestSiderangesOnlyOnMiddleTab(t *testing.T) {
 	}
 	if !strings.Contains(panel, "vs UTG1") {
 		t.Errorf("panel should contain siderange items, got: %s", panel)
+	}
+}
+
+func TestParseTabStacks(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect map[string]float64
+	}{
+		{
+			name:  "format with hero and avg",
+			input: "HJ 14BB | 10BB Avg | CO 4 | BTN 18 | SB 7.5 | BB 15",
+			expect: map[string]float64{"HJ": 14, "CO": 4, "BTN": 18, "SB": 7.5, "BB": 15},
+		},
+		{
+			name:  "format with all positions",
+			input: "HJ 6BB | 10BB Avg | UTG 24 | UTG+1 7 | LJ 8 | CO 9 | BTN 5 | SB 9.5 | BB 10",
+			expect: map[string]float64{"HJ": 6, "UTG": 24, "UTG+1": 7, "LJ": 8, "CO": 9, "BTN": 5, "SB": 9.5, "BB": 10},
+		},
+		{
+			name:  "villains only format",
+			input: "CO 22 | BTN 26 | SB 12.5 | BB 17 || UTG 24 | UTG+1 27 | LJ 16",
+			expect: map[string]float64{"CO": 22, "BTN": 26, "SB": 12.5, "BB": 17, "UTG": 24, "UTG+1": 27, "LJ": 16},
+		},
+		{
+			name:   "simple tabs without stacks",
+			input:  "20BB",
+			expect: map[string]float64{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseTabStacks(tt.input)
+			for pos, expected := range tt.expect {
+				if got, ok := result[pos]; !ok {
+					t.Errorf("missing position %s", pos)
+				} else if got != expected {
+					t.Errorf("position %s: got %g, want %g", pos, got, expected)
+				}
+			}
+		})
+	}
+}
+
+func TestDetectHeroPosition(t *testing.T) {
+	tests := []struct {
+		input  string
+		expect string
+	}{
+		{"HJ 14BB | 10BB Avg | CO 4", "HJ"},
+		{"UTG 32BB | 20BB Avg", "UTG"},
+		{"20BB", ""},
+		{"CO 17 | BTN 23", "CO"},
+	}
+	for _, tt := range tests {
+		got := detectHeroPosition(tt.input)
+		if got != tt.expect {
+			t.Errorf("detectHeroPosition(%q) = %q, want %q", tt.input, got, tt.expect)
+		}
+	}
+}
+
+func TestPositionsBehind(t *testing.T) {
+	behind := PositionsBehind("HJ")
+	if behind[0] != "CO" || behind[1] != "BTN" || behind[2] != "SB" || behind[3] != "BB" {
+		t.Errorf("HJ behind: got %v, want [CO BTN SB BB ...]", behind)
+	}
+	behind = PositionsBehind("UTG")
+	if behind[0] != "UTG+1" {
+		t.Errorf("UTG behind: got %v, want [UTG+1 ...]", behind)
 	}
 }
 

@@ -3,10 +3,95 @@ package ranges
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// PositionOrder is the standard poker seating order for 8-max
+var PositionOrder = []string{"UTG", "UTG+1", "LJ", "HJ", "CO", "BTN", "SB", "BB"}
+
+// stackPattern matches "POS VALUE" or "POS: VALUE" with optional brackets and BB suffix
+var stackPattern = regexp.MustCompile(`\[?([A-Za-z][A-Za-z0-9+]*):?\s+([\d.]+)`)
+
+// normalizePosition standardizes position name variants
+func normalizePosition(pos string) string {
+	pos = strings.ToUpper(pos)
+	if pos == "UT1" || pos == "UTG1" {
+		pos = "UTG+1"
+	}
+	return pos
+}
+
+// parseTabStacks extracts position-stack pairs from a tab name or details string.
+// Handles formats like:
+//   "HJ 14BB | 10BB Avg | CO 4 | BTN 18 | SB 7.5 | BB 15"
+//   "[HJ: 14BB] | UTG: 6BB | CO: 4BB"
+func parseTabStacks(text string) map[string]float64 {
+	stacks := make(map[string]float64)
+	// Split on | and newlines
+	segments := strings.FieldsFunc(text, func(r rune) bool {
+		return r == '|' || r == '\n'
+	})
+	for _, seg := range segments {
+		seg = strings.TrimSpace(seg)
+		if strings.Contains(seg, "Avg") || strings.Contains(seg, "Field") || strings.Contains(seg, "max") {
+			continue
+		}
+		m := stackPattern.FindStringSubmatch(seg)
+		if m == nil {
+			continue
+		}
+		pos := normalizePosition(m[1])
+		val, err := strconv.ParseFloat(m[2], 64)
+		if err != nil {
+			continue
+		}
+		stacks[pos] = val
+	}
+	return stacks
+}
+
+// PositionsBehind returns the positions that act after the hero in standard order
+func PositionsBehind(hero string) []string {
+	hero = strings.ToUpper(hero)
+	idx := -1
+	for i, p := range PositionOrder {
+		if p == hero {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return nil
+	}
+	// Positions after hero in seating order (wrapping around)
+	var behind []string
+	for i := 1; i < len(PositionOrder); i++ {
+		pos := PositionOrder[(idx+i)%len(PositionOrder)]
+		behind = append(behind, pos)
+	}
+	return behind
+}
+
+// heroPattern matches a known position name at the start of a string
+var heroPattern = regexp.MustCompile(`(?i)^(UTG\+1|UTG1|UTG|LJ|HJ|CO|BTN|SB|BB)\b`)
+
+// detectHeroPosition extracts the hero position from a title or tab name.
+// Works with "HJ Open Raise FT", "HJ 14BB | CO 4", etc.
+func detectHeroPosition(text string) string {
+	text = strings.TrimSpace(text)
+	// Remove leading bracket if present
+	text = strings.TrimLeft(text, "[")
+	m := heroPattern.FindStringSubmatch(text)
+	if m == nil {
+		return ""
+	}
+	return normalizePosition(m[1])
+}
 
 // HandEntry represents a hand in an action's hands list.
 // Can be a plain string (100% frequency) or {hand, freq} for mixed strategies.
@@ -93,6 +178,7 @@ type TabRange struct {
 	Actions    []Action     `yaml:"actions"`
 	Opposite   *OppositeRef `yaml:"opposite"`
 	Sideranges *Sideranges  `yaml:"sideranges"`
+	Stacks     []float64    `yaml:"stacks"`
 }
 
 // RangeFile represents the full YAML structure
@@ -103,6 +189,7 @@ type RangeFile struct {
 	Actions     []Action     `yaml:"actions"`
 	Tabs        []TabRange   `yaml:"tab_ranges"`
 	TabStyle    string       `yaml:"tab_style"`
+	Position    string       `yaml:"position"`
 	Opposite    *OppositeRef `yaml:"opposite"`
 	Sideranges  *Sideranges  `yaml:"sideranges"`
 }

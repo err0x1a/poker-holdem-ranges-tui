@@ -2,9 +2,12 @@ package ranges
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -63,6 +66,13 @@ type Model struct {
 
 	// Tab display style: "" = horizontal bar, "single" = one tab at a time with arrows
 	tabStyle string
+
+	// Stack matching mode (activated by 'f' when tabs have stacks defined)
+	stackMatching  bool
+	stackInput     textinput.Model
+	stackPrevIndex int
+	tabStacks      [][]float64 // stacks per tab from YAML
+	matchLabels    []string    // position labels for the prompt
 }
 
 // New creates a new model with the generated poker hands.
@@ -80,8 +90,9 @@ func NewWithRange(actions []Action, details string, sideranges *Sideranges) Mode
 	}
 }
 
-// NewWithTabs creates a model with multiple tabs, selecting the first one
-func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges, tabStyle string) Model {
+// NewWithTabs creates a model with multiple tabs, selecting the first one.
+// position is the hero position (e.g. "HJ") used for stack matching labels.
+func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges, tabStyle string, position string) Model {
 	cache := make([]tabDisplayData, len(tabs))
 	for i, tr := range tabs {
 		sr := tr.Sideranges
@@ -96,6 +107,38 @@ func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges, tabStyle string) M
 		}
 	}
 
+	// Collect stacks from tabs for stack matching
+	var tabStacks [][]float64
+	hasStacks := false
+	for _, tr := range tabs {
+		tabStacks = append(tabStacks, tr.Stacks)
+		if len(tr.Stacks) > 0 {
+			hasStacks = true
+		}
+	}
+
+	// Build match labels from position (hero + positions behind), limited to stacks length
+	var matchLabels []string
+	if hasStacks {
+		hero := normalizePosition(position)
+		if hero != "" {
+			all := append([]string{hero}, PositionsBehind(hero)...)
+			// Limit labels to match the number of stacks in the first tab that has them
+			maxLen := len(all)
+			for _, s := range tabStacks {
+				if len(s) > 0 {
+					maxLen = len(s)
+					break
+				}
+			}
+			if maxLen < len(all) {
+				matchLabels = all[:maxLen]
+			} else {
+				matchLabels = all
+			}
+		}
+	}
+
 	return Model{
 		handDetails: cache[0].handDetails,
 		legend:      cache[0].legend,
@@ -105,6 +148,8 @@ func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges, tabStyle string) M
 		tabs:        tabs,
 		tabCache:    cache,
 		tabStyle:    tabStyle,
+		tabStacks:   tabStacks,
+		matchLabels: matchLabels,
 	}
 }
 
@@ -132,6 +177,77 @@ func (m Model) HasTabSelector() bool {
 // IsSingleTabStyle returns true if tabs render one at a time with arrows
 func (m Model) IsSingleTabStyle() bool {
 	return m.tabStyle == tabStyleSingle && len(m.tabs) > 0
+}
+
+// IsStackMatching returns true when the stack matcher input is active
+func (m Model) IsStackMatching() bool {
+	return m.stackMatching
+}
+
+// enterStackMatch activates the stack matching input mode
+func (m *Model) enterStackMatch() tea.Cmd {
+	if len(m.matchLabels) == 0 || len(m.tabStacks) == 0 {
+		return nil
+	}
+	m.stackMatching = true
+	m.stackPrevIndex = m.tabIndex
+	ti := textinput.New()
+	ti.CharLimit = 50
+	m.stackInput = ti
+	return m.stackInput.Focus()
+}
+
+// exitStackMatch leaves stack matching mode
+func (m *Model) exitStackMatch(confirm bool) {
+	m.stackMatching = false
+	if !confirm {
+		m.SetTabIndex(m.stackPrevIndex)
+	}
+}
+
+// findBestMatch returns the tab index with the smallest weighted distance to the input stacks.
+// The first value (hero stack) gets 10x weight since it's the most impactful factor.
+func (m Model) findBestMatch(input []float64) int {
+	bestIdx := m.tabIndex
+	bestDist := math.MaxFloat64
+
+	for i, stacks := range m.tabStacks {
+		if len(stacks) == 0 {
+			continue
+		}
+		dist := 0.0
+		n := len(input)
+		if n > len(stacks) {
+			n = len(stacks)
+		}
+		for j := 0; j < n; j++ {
+			d := input[j] - stacks[j]
+			weight := 1.0
+			if j == 0 {
+				weight = 10.0 // hero stack is the dominant factor
+			}
+			dist += weight * d * d
+		}
+		if dist < bestDist {
+			bestDist = dist
+			bestIdx = i
+		}
+	}
+	return bestIdx
+}
+
+// parseStackInput parses space-separated numbers from the input string
+func parseStackInput(s string) []float64 {
+	fields := strings.Fields(s)
+	var vals []float64
+	for _, f := range fields {
+		v, err := strconv.ParseFloat(f, 64)
+		if err != nil {
+			continue
+		}
+		vals = append(vals, v)
+	}
+	return vals
 }
 
 // TabIndex returns the currently selected tab index
@@ -192,12 +308,17 @@ func (m Model) WantsKey(key string) bool {
 	switch key {
 	case "h", "j", "k", "l", "up", "down", "left", "right":
 		return true
+	case "f":
+		return len(m.matchLabels) > 0 && !m.stackMatching
 	case "s":
 		return m.hasSideranges()
 	case "enter":
-		return m.siderangeFocused
+		return m.siderangeFocused || m.stackMatching
 	case "esc":
-		return m.siderangeFocused || m.showingSiderange
+		return m.siderangeFocused || m.showingSiderange || m.stackMatching
+	}
+	if m.stackMatching {
+		return true // capture all keys during stack matching
 	}
 	return false
 }
@@ -215,6 +336,29 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		key := keyMsg.String()
+
+		// Stack matching input
+		if m.stackMatching {
+			switch key {
+			case "enter":
+				m.exitStackMatch(true)
+				return m, nil
+			case "esc":
+				m.exitStackMatch(false)
+				return m, nil
+			default:
+				var cmd tea.Cmd
+				m.stackInput, cmd = m.stackInput.Update(msg)
+				input := parseStackInput(m.stackInput.Value())
+				if len(input) > 0 {
+					best := m.findBestMatch(input)
+					if best != m.tabIndex {
+						m.SetTabIndex(best)
+					}
+				}
+				return m, cmd
+			}
+		}
 
 		// Siderange-focused input
 		if m.siderangeFocused {
@@ -271,6 +415,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursorCol++
 			}
 			return m, nil
+		case "f":
+			return m, m.enterStackMatch()
 		case "s":
 			if m.hasSideranges() {
 				m.siderangeFocused = true
@@ -560,7 +706,15 @@ func (m Model) View() string {
 	// Add tab selector above grid
 	if len(m.tabs) > 0 {
 		var tabLine string
-		if m.IsSingleTabStyle() {
+		if m.stackMatching {
+			// Stack matching prompt
+			labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+			posStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD166")).Bold(true)
+
+			posLabels := strings.Join(m.matchLabels, " ")
+			prompt := labelStyle.Render("Stacks (") + posStyle.Render(posLabels) + labelStyle.Render("): ")
+			tabLine = prompt + m.stackInput.View()
+		} else if m.IsSingleTabStyle() {
 			// Single mode: one tab at a time with arrows
 			arrowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4488FF")).Bold(true)
 			highlightStyle := lipgloss.NewStyle().

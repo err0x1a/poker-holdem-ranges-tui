@@ -144,7 +144,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedFilePath = filePath
 		if rf, err := ranges.LoadRangeFile(filePath); err == nil {
 			if rf.HasTabs() {
-				m.rangesModel = ranges.NewWithTabs(rf.Tabs, rf.Sideranges, rf.TabStyle)
+				m.rangesModel = ranges.NewWithTabs(rf.Tabs, rf.Sideranges, rf.TabStyle, rf.Position)
 				if m.lastTabName != "" {
 					m.rangesModel.SetTabByName(m.lastTabName)
 				}
@@ -168,7 +168,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Don't forward key events to ranges model while the list filter is active
-	if _, isKey := msg.(tea.KeyMsg); isKey && m.listModel.IsFiltering() {
+	// During stack matching, all keys go to ranges model
+	if _, isKey := msg.(tea.KeyMsg); isKey && m.listModel.IsFiltering() && !m.rangesModel.IsStackMatching() {
 		return m, listCmd
 	}
 
