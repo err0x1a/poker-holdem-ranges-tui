@@ -591,7 +591,7 @@ func (m Model) View() string {
 				counterStyle.Render(" "+counter),
 			)
 		} else {
-			// Tab bar mode: horizontal tabs
+			// Tab bar mode: horizontal tabs with scroll
 			selectedStyle := lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("#FFFFFF")).
@@ -600,14 +600,73 @@ func (m Model) View() string {
 			dimStyle := lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#666666")).
 				Padding(0, 1)
+			scrollStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#4488FF")).
+				Bold(true).
+				Padding(0, 1)
+
+			// Calculate tab widths and determine visible window
+			const scrollArrowWidth = 3 // "◀" + padding(0,1) = 1 char + 2 padding
+			maxWidth := 13 * cellW
+			if eyeIndicator != "" {
+				maxWidth -= 4
+			}
+
+			tabWidths := make([]int, len(m.tabs))
+			totalWidth := 0
+			for i, tr := range m.tabs {
+				tabWidths[i] = 2 + len(tr.Tab) // padding(2) + text
+				totalWidth += tabWidths[i]
+			}
+
+			start, end := 0, len(m.tabs)
+			if totalWidth > maxWidth {
+				// Reserve space for both scroll indicators upfront
+				budget := maxWidth - 2*scrollArrowWidth
+				start = m.tabIndex
+				end = m.tabIndex + 1
+				usedWidth := tabWidths[m.tabIndex]
+
+				for {
+					expanded := false
+					if start > 0 && usedWidth+tabWidths[start-1] <= budget {
+						start--
+						usedWidth += tabWidths[start]
+						expanded = true
+					}
+					if end < len(m.tabs) && usedWidth+tabWidths[end] <= budget {
+						usedWidth += tabWidths[end]
+						end++
+						expanded = true
+					}
+					if !expanded {
+						break
+					}
+				}
+
+				// Reclaim arrow space if we reached the edge
+				if start == 0 && usedWidth+scrollArrowWidth+tabWidths[start] <= maxWidth {
+					// No left arrow needed; try to fit one more on the right
+					for end < len(m.tabs) && usedWidth+tabWidths[end] <= maxWidth-scrollArrowWidth {
+						usedWidth += tabWidths[end]
+						end++
+					}
+				}
+			}
 
 			var tabItems []string
-			for i, tr := range m.tabs {
+			if start > 0 {
+				tabItems = append(tabItems, scrollStyle.Render("◀"))
+			}
+			for i := start; i < end; i++ {
 				if i == m.tabIndex {
-					tabItems = append(tabItems, selectedStyle.Render(tr.Tab))
+					tabItems = append(tabItems, selectedStyle.Render(m.tabs[i].Tab))
 				} else {
-					tabItems = append(tabItems, dimStyle.Render(tr.Tab))
+					tabItems = append(tabItems, dimStyle.Render(m.tabs[i].Tab))
 				}
+			}
+			if end < len(m.tabs) {
+				tabItems = append(tabItems, scrollStyle.Render("▶"))
 			}
 			tabLine = lipgloss.JoinHorizontal(lipgloss.Center, tabItems...)
 		}
