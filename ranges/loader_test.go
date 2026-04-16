@@ -519,7 +519,7 @@ func TestSiderangesFallbackInModel(t *testing.T) {
 		},
 	}
 
-	model := NewWithTabs(tabs, fileSideranges, "", "")
+	model := NewWithTabs(tabs, fileSideranges, "", "", nil)
 
 	// First tab should use its own sideranges
 	if model.sideranges == nil || model.sideranges.Title != "tab-level" {
@@ -552,7 +552,7 @@ func TestSiderangesOnlyOnMiddleTab(t *testing.T) {
 		{Tab: "17BB", Actions: []Action{{Name: "r", Title: "R", Color: "#fff", Hands: []HandEntry{{Hand: "AA"}}}}},
 	}
 
-	model := NewWithTabs(tabs, nil, "", "") // no file-level sideranges
+	model := NewWithTabs(tabs, nil, "", "", nil) // no file-level sideranges
 
 	// Tab 0 (100BB) - no sideranges
 	if model.hasSideranges() {

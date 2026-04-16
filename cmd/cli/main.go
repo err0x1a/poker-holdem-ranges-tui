@@ -80,6 +80,7 @@ type MainModel struct {
 	rangesModel      ranges.Model
 	selectedFilePath string
 	lastTabName string
+	termWidth   int
 }
 
 // NewMainModel creates a new main model
@@ -99,6 +100,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.termWidth = msg.Width
 		listWidth := msg.Width / 4
 		m.listModel.SetSize(listWidth, 43)
 
@@ -144,7 +146,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedFilePath = filePath
 		if rf, err := ranges.LoadRangeFile(filePath); err == nil {
 			if rf.HasTabs() {
-				m.rangesModel = ranges.NewWithTabs(rf.Tabs, rf.Sideranges, rf.TabStyle, rf.Position)
+				m.rangesModel = ranges.NewWithTabs(rf.Tabs, rf.Sideranges, rf.TabStyle, rf.Position, rf.FindLabels)
 				if m.lastTabName != "" {
 					m.rangesModel.SetTabByName(m.lastTabName)
 				}
@@ -164,6 +166,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.rangesModel.SetFilePath(filePath)
 			m.rangesModel.SetHiddenActions(savedHidden)
+			m.rangesModel.SetWidth(m.termWidth)
 		}
 	}
 

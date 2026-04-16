@@ -55,7 +55,7 @@ func parseTabStacks(text string) map[string]float64 {
 	return stacks
 }
 
-// PositionsBehind returns the positions that act after the hero in standard order
+// PositionsBehind returns the positions that act after the hero in standard order (no wrapping)
 func PositionsBehind(hero string) []string {
 	hero = strings.ToUpper(hero)
 	idx := -1
@@ -68,13 +68,7 @@ func PositionsBehind(hero string) []string {
 	if idx < 0 {
 		return nil
 	}
-	// Positions after hero in seating order (wrapping around)
-	var behind []string
-	for i := 1; i < len(PositionOrder); i++ {
-		pos := PositionOrder[(idx+i)%len(PositionOrder)]
-		behind = append(behind, pos)
-	}
-	return behind
+	return PositionOrder[idx+1:]
 }
 
 // heroPattern matches a known position name at the start of a string
@@ -190,6 +184,7 @@ type RangeFile struct {
 	Tabs        []TabRange   `yaml:"tab_ranges"`
 	TabStyle    string       `yaml:"tab_style"`
 	Position    string       `yaml:"position"`
+	FindLabels  []string     `yaml:"find_labels"`
 	Opposite    *OppositeRef `yaml:"opposite"`
 	Sideranges  *Sideranges  `yaml:"sideranges"`
 }

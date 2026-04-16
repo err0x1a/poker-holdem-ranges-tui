@@ -67,6 +67,9 @@ type Model struct {
 	// Tab display style: "" = horizontal bar, "single" = one tab at a time with arrows
 	tabStyle string
 
+	// Terminal width (from tea.WindowSizeMsg), used to wrap the details panel.
+	width int
+
 	// Stack matching mode (activated by 'f' when tabs have stacks defined)
 	stackMatching  bool
 	stackInput     textinput.Model
@@ -92,7 +95,8 @@ func NewWithRange(actions []Action, details string, sideranges *Sideranges) Mode
 
 // NewWithTabs creates a model with multiple tabs, selecting the first one.
 // position is the hero position (e.g. "HJ") used for stack matching labels.
-func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges, tabStyle string, position string) Model {
+// findLabels overrides the auto-generated labels when provided.
+func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges, tabStyle string, position string, findLabels []string) Model {
 	cache := make([]tabDisplayData, len(tabs))
 	for i, tr := range tabs {
 		sr := tr.Sideranges
@@ -117,24 +121,27 @@ func NewWithTabs(tabs []TabRange, fileSideranges *Sideranges, tabStyle string, p
 		}
 	}
 
-	// Build match labels from position (hero + positions behind), limited to stacks length
 	var matchLabels []string
 	if hasStacks {
-		hero := normalizePosition(position)
-		if hero != "" {
-			all := append([]string{hero}, PositionsBehind(hero)...)
-			// Limit labels to match the number of stacks in the first tab that has them
-			maxLen := len(all)
-			for _, s := range tabStacks {
-				if len(s) > 0 {
-					maxLen = len(s)
-					break
+		if len(findLabels) > 0 {
+			matchLabels = findLabels
+		} else {
+			hero := normalizePosition(position)
+			if hero != "" {
+				all := append([]string{hero}, PositionsBehind(hero)...)
+				// Limit labels to match the number of stacks in the first tab that has them
+				maxLen := len(all)
+				for _, s := range tabStacks {
+					if len(s) > 0 {
+						maxLen = len(s)
+						break
+					}
 				}
-			}
-			if maxLen < len(all) {
-				matchLabels = all[:maxLen]
-			} else {
-				matchLabels = all
+				if maxLen < len(all) {
+					matchLabels = all[:maxLen]
+				} else {
+					matchLabels = all
+				}
 			}
 		}
 	}
@@ -297,6 +304,11 @@ func (m *Model) SetTabByName(name string) bool {
 	return false
 }
 
+// SetWidth stores the terminal width used for wrapping the details panel.
+func (m *Model) SetWidth(w int) {
+	m.width = w
+}
+
 // SetFilePath stores the file path for resolving relative siderange paths
 func (m *Model) SetFilePath(path string) {
 	m.filePath = path
@@ -334,6 +346,9 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages and updates the model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = ws.Width
+	}
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		key := keyMsg.String()
 
@@ -866,11 +881,38 @@ func (m Model) View() string {
 		if len(m.tabs) > 0 {
 			detailsStyle = detailsStyle.MarginTop(1)
 		}
+		if w := m.detailsContentWidth(detailsStyle.GetHorizontalFrameSize()); w > 0 {
+			detailsStyle = detailsStyle.Width(w)
+		}
 		detailsPanel := detailsStyle.Render(panelContent)
 		return lipgloss.JoinHorizontal(lipgloss.Top, gridWithLegend, detailsPanel)
 	}
 
 	return gridWithLegend
+}
+
+// detailsContentWidth returns the wrap width for the details panel content,
+// or 0 when the terminal width is unknown or too small to wrap meaningfully.
+// frameSize is the panel's border+padding+margin horizontal cost.
+func (m Model) detailsContentWidth(frameSize int) int {
+	if m.width <= 0 {
+		return 0
+	}
+	const (
+		spacer    = 2  // between list and grid
+		gridWidth = 13 * cellW
+		minWidth  = 20 // below this, wrapping produces unreadable columns
+		maxWidth  = 50 // above this, lines become too long to scan comfortably
+	)
+	listWidth := m.width / 4
+	w := m.width - listWidth - spacer - gridWidth - frameSize
+	if w < minWidth {
+		return 0
+	}
+	if w > maxWidth {
+		w = maxWidth
+	}
+	return w
 }
 
 // buildDetailsPanel returns the content for the right-side details panel.
